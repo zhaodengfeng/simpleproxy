@@ -80,6 +80,8 @@ install_acme() {
     if [ ! -f "$HOME/.acme.sh/acme.sh" ]; then
         echo -e "${BLUE}Installing acme.sh...${NC}"
         curl https://get.acme.sh | sh -s email=admin@localhost.com
+        # Set Let's Encrypt as default CA (not ZeroSSL)
+        ~/.acme.sh/acme.sh --set-default-ca --server letsencrypt
     fi
     export PATH="$HOME/.acme.sh:$PATH"
 }
@@ -138,7 +140,8 @@ apply_ssl() {
     systemctl stop httpd 2>/dev/null || true
     sleep 2
     
-    # Issue certificate using standalone mode
+    # Issue certificate using Let's Encrypt (not ZeroSSL)
+    ~/.acme.sh/acme.sh --set-default-ca --server letsencrypt
     ~/.acme.sh/acme.sh --issue -d $domain --standalone --keylength ec-256 --force
     local issue_result=$?
     
