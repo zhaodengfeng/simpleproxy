@@ -25,7 +25,15 @@ gen_random() {
 }
 
 gen_uuid() {
-    cat /proc/sys/kernel/random/uuid 2>/dev/null || tr -dc 'a-f0-9' < /dev/urandom | head -c 8; echo -n '-'; tr -dc 'a-f0-9' < /dev/urandom | head -c 4; echo -n '-4'; tr -dc 'a-f0-9' < /dev/urandom | head -c 3; echo -n '-'; tr -dc '89ab' < /dev/urandom | head -c 1; tr -dc 'a-f0-9' < /dev/urandom | head -c 3; echo -n '-'; tr -dc 'a-f0-9' < /dev/urandom | head -c 12
+    local uuid=$(cat /proc/sys/kernel/random/uuid 2>/dev/null)
+    if [ -z "$uuid" ]; then
+        uuid=$(tr -dc 'a-f0-9' < /dev/urandom | head -c 8)
+        uuid="${uuid}-$(tr -dc 'a-f0-9' < /dev/urandom | head -c 4)"
+        uuid="${uuid}-4$(tr -dc 'a-f0-9' < /dev/urandom | head -c 3)"
+        uuid="${uuid}-$(tr -dc '89ab' < /dev/urandom | head -c 1)$(tr -dc 'a-f0-9' < /dev/urandom | head -c 3)"
+        uuid="${uuid}-$(tr -dc 'a-f0-9' < /dev/urandom | head -c 12)"
+    fi
+    echo -n "$uuid"
 }
 
 # Global variables
