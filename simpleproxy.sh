@@ -910,17 +910,52 @@ install_anytls() {
     
     cd /tmp
     echo -e "${BLUE}下载 AnyTLS ${anytls_version}...${NC}"
-    if ! wget -q --show-progress "$download_url" -O anytls.tar.gz; then
+    
+    # Try multiple download methods
+    local download_success=false
+    
+    # Method 1: wget with timeout
+    if ! $download_success; then
+        echo -e "${BLUE}尝试使用 wget 下载...${NC}"
+        if wget -q --timeout=30 --tries=2 --show-progress "$download_url" -O anytls.tar.gz 2>/dev/null; then
+            download_success=true
+        fi
+    fi
+    
+    # Method 2: curl
+    if ! $download_success; then
+        echo -e "${BLUE}尝试使用 curl 下载...${NC}"
+        if curl -fsSL --max-time 60 --retry 2 "$download_url" -o anytls.tar.gz 2>/dev/null; then
+            download_success=true
+        fi
+    fi
+    
+    # Method 3: wget with GitHub proxy
+    if ! $download_success; then
+        echo -e "${BLUE}尝试使用代理下载...${NC}"
+        local proxy_url="https://ghproxy.com/$download_url"
+        if wget -q --timeout=60 --tries=2 --show-progress "$proxy_url" -O anytls.tar.gz 2>/dev/null; then
+            download_success=true
+        elif curl -fsSL --max-time 90 --retry 2 "$proxy_url" -o anytls.tar.gz 2>/dev/null; then
+            download_success=true
+        fi
+    fi
+    
+    if ! $download_success; then
         echo -e "${RED}下载失败，请检查网络或手动下载${NC}"
+        echo -e "${YELLOW}手动下载地址: ${download_url}${NC}"
+        echo -e "${YELLOW}下载后上传到 /tmp/anytls.tar.gz，然后重新运行脚本${NC}"
         return 1
     fi
     
     # Verify download
-    if [ ! -f "anytls.tar.gz" ] || [ $(stat -c%s anytls.tar.gz 2>/dev/null || echo 0) -lt 1000 ]; then
-        echo -e "${RED}下载文件无效，可能是 GitHub 限制${NC}"
+    local file_size=$(stat -c%s anytls.tar.gz 2>/dev/null || echo 0)
+    if [ ! -f "anytls.tar.gz" ] || [ "$file_size" -lt 1000000 ]; then
+        echo -e "${RED}下载文件无效 (${file_size} 字节)，可能是 GitHub 限制${NC}"
         rm -f anytls.tar.gz
         return 1
     fi
+    echo -e "${GREEN}✓ 下载成功 (${file_size} 字节)${NC}"
     
     tar -xzf anytls.tar.gz
     mv sink /usr/local/bin/anytls
@@ -1209,11 +1244,13 @@ install_snell() {
     
     mkdir -p /etc/snell
     
+    # Snell v5 configuration with DNS support
     cat > /etc/snell/snell-server.conf <<EOF
 [snell-server]
 listen = 0.0.0.0:${snport}
 psk = ${snpsk}
 ipv6 = false
+dns = 8.8.8.8, 1.1.1.1
 EOF
     
     # Create systemd service
@@ -1260,9 +1297,10 @@ EOF
 服务器地址: ${server_ip}
 端口: ${snport}
 PSK: ${snpsk}
-版本: 4
+版本: 5
+DNS: 8.8.8.8, 1.1.1.1
 
-snell://${snpsk}@${server_ip}:${snport}?version=4#Snell
+snell://${snpsk}@${server_ip}:${snport}?version=5#Snell
 EOF
     
     echo ""
@@ -1285,11 +1323,14 @@ upgrade_snell() {
             ;;
     esac
     
-    # Fixed version, no API call (avoid GitHub rate limit)
-    local snell_version="v4.1.1"
-    
     # Get latest version for upgrade (official source)
     local snell_version=$(curl -s "https://kb.nssurge.com/surge-knowledge-base/zh/release-notes/snell" 2>/dev/null | grep -oE "snell-server-v[0-9]+\.[0-9]+\.[0-9]+" | head -1 | sed 's/snell-server-v//')
+    
+    # Default to v5 if version detection fails
+    if [ -z "$snell_version" ]; then
+        snell_version="5.0.1"
+        echo -e "${YELLOW}获取版本失败，使用默认版本 v${snell_version}${NC}"
+    fi
     if [ -z "$snell_version" ]; then
         snell_version="5.0.1"
     fi
