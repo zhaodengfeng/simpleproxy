@@ -930,21 +930,54 @@ install_anytls() {
         fi
     fi
     
-    # Method 3: wget with GitHub proxy
+    # Method 3: Multiple GitHub proxies
     if ! $download_success; then
-        echo -e "${BLUE}尝试使用代理下载...${NC}"
-        local proxy_url="https://ghproxy.com/$download_url"
-        if wget -q --timeout=60 --tries=2 --show-progress "$proxy_url" -O anytls.tar.gz 2>/dev/null; then
-            download_success=true
-        elif curl -fsSL --max-time 90 --retry 2 "$proxy_url" -o anytls.tar.gz 2>/dev/null; then
+        echo -e "${BLUE}尝试使用 GitHub 代理...${NC}"
+        local proxy_list=(
+            "https://ghproxy.com/"
+            "https://gh-proxy.com/"
+            "https://gh.api.99988866.xyz/"
+            "https://gitproxy.click/"
+            "https://github.moeyy.xyz/"
+        )
+        for proxy in "${proxy_list[@]}"; do
+            echo -e "${BLUE}尝试代理: ${proxy}${NC}"
+            if wget -q --timeout=30 --tries=2 "${proxy}${download_url}" -O anytls.tar.gz 2>/dev/null; then
+                download_success=true
+                break
+            elif curl -fsSL --max-time 60 --retry 2 "${proxy}${download_url}" -o anytls.tar.gz 2>/dev/null; then
+                download_success=true
+                break
+            fi
+        done
+    fi
+    
+    # Method 4: Check if file already exists (manual download)
+    if ! $download_success && [ -f "/tmp/anytls.tar.gz" ]; then
+        echo -e "${YELLOW}检测到已有下载文件 /tmp/anytls.tar.gz${NC}"
+        local file_size=$(stat -c%s /tmp/anytls.tar.gz 2>/dev/null || echo 0)
+        if [ "$file_size" -gt 1000000 ]; then
+            echo -e "${GREEN}✓ 使用已有文件 (${file_size} 字节)${NC}"
+            cp /tmp/anytls.tar.gz /tmp/anytls.tar.gz.bak
             download_success=true
         fi
     fi
     
     if ! $download_success; then
-        echo -e "${RED}下载失败，请检查网络或手动下载${NC}"
-        echo -e "${YELLOW}手动下载地址: ${download_url}${NC}"
-        echo -e "${YELLOW}下载后上传到 /tmp/anytls.tar.gz，然后重新运行脚本${NC}"
+        echo -e "${RED}✗ 所有下载方式都失败了${NC}"
+        echo ""
+        echo -e "${YELLOW}=== 手动下载指南 ===${NC}"
+        echo -e "1. 在浏览器或另一台服务器下载："
+        echo -e "   ${download_url}"
+        echo -e ""
+        echo -e "2. 上传到当前服务器的 /tmp/ 目录，重命名为 anytls.tar.gz"
+        echo -e ""
+        echo -e "3. 重新运行脚本安装 AnyTLS"
+        echo -e ""
+        echo -e "${YELLOW}或者尝试以下代理链接手动下载：${NC}"
+        for proxy in "${proxy_list[@]}"; do
+            echo -e "   ${proxy}${download_url}"
+        done
         return 1
     fi
     
