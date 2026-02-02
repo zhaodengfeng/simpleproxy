@@ -170,8 +170,15 @@ install_ssrust() {
     local sspass=$(gen_random 16)
     local smethod="aes-256-gcm"
     
-    # Download and install (fixed version, no API call)
-    local ssrust_version="v1.24.0"
+    # Get latest version from GitHub releases redirect (no API)
+    echo -e "${BLUE}获取 Shadowsocks-rust 最新版本...${NC}"
+    local ssrust_version=$(curl -sI "https://github.com/shadowsocks/shadowsocks-rust/releases/latest" | grep -i location | sed -E 's/.*tag\/(v[0-9.]+).*/\1/')
+    if [ -z "$ssrust_version" ]; then
+        ssrust_version="v1.24.0"
+        echo -e "${YELLOW}获取版本失败，使用默认版本 ${ssrust_version}${NC}"
+    else
+        echo -e "${GREEN}最新版本: ${ssrust_version}${NC}"
+    fi
     
     local arch=$(uname -m)
     local download_arch="x86_64-unknown-linux-gnu"
@@ -778,8 +785,15 @@ install_anytls() {
     # Apply SSL certificate
     apply_ssl "$DOMAIN" || return 1
     
-    # Download AnyTLS (fixed version, no API call)
-    local anytls_version="v0.11.0"
+    # Get latest version from GitHub releases redirect (no API)
+    echo -e "${BLUE}获取 AnyTLS 最新版本...${NC}"
+    local anytls_version=$(curl -sI "https://github.com/anytls/sink/releases/latest" | grep -i location | sed -E 's/.*tag\/(v[0-9.]+).*/\1/')
+    if [ -z "$anytls_version" ]; then
+        anytls_version="v0.11.0"
+        echo -e "${YELLOW}获取版本失败，使用默认版本 ${anytls_version}${NC}"
+    else
+        echo -e "${GREEN}最新版本: ${anytls_version}${NC}"
+    fi
     local arch=$(uname -m)
     local download_arch="x86_64-unknown-linux-musl"
     case $arch in
@@ -1046,8 +1060,15 @@ install_snell() {
             ;;
     esac
     
-    # Fixed version, no API call (avoid GitHub rate limit)
-    local snell_version="v4.1.1"
+    # Get latest version from GitHub releases redirect (no API)
+    echo -e "${BLUE}获取 Snell 最新版本...${NC}"
+    local snell_version=$(curl -sI "https://github.com/surge-networks/snell/releases/latest" | grep -i location | sed -E 's/.*tag\/(v[0-9.]+).*/\1/')
+    if [ -z "$snell_version" ]; then
+        snell_version="v4.1.1"
+        echo -e "${YELLOW}获取版本失败，使用默认版本 ${snell_version}${NC}"
+    else
+        echo -e "${GREEN}最新版本: ${snell_version}${NC}"
+    fi
     
     cd /tmp
     echo -e "${BLUE}下载 Snell ${snell_version}...${NC}"
