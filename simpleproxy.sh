@@ -610,11 +610,42 @@ EOF
         echo -e "${RED}✗ Reality/Xray 服务启动失败${NC}"
         echo ""
         echo -e "${YELLOW}=== 诊断信息 ===${NC}"
-        echo -e "${YELLOW}1. 检查配置有效性:${NC}"
-        xray -test -config /usr/local/etc/xray/config.json 2>&1 | head -5
+        
+        echo -e "${YELLOW}1. 检查 Xray 二进制文件:${NC}"
+        which xray && xray version 2>&1 | head -2 || echo -e "${RED}Xray 未找到${NC}"
         echo ""
-        echo -e "${YELLOW}2. 查看日志:${NC}"
-        journalctl -u xray.service -n 10 --no-pager
+        
+        echo -e "${YELLOW}2. 检查配置有效性:${NC}"
+        xray -test -config /usr/local/etc/xray/config.json 2>&1
+        echo ""
+        
+        echo -e "${YELLOW}3. 查看服务状态:${NC}"
+        systemctl status xray.service --no-pager 2>&1 | head -10
+        echo ""
+        
+        echo -e "${YELLOW}4. 查看详细日志:${NC}"
+        journalctl -u xray.service -n 20 --no-pager 2>&1
+        echo ""
+        
+        echo -e "${YELLOW}5. 检查端口占用:${NC}"
+        netstat -tlnp 2>/dev/null | grep -E ":${rport} " || ss -tlnp 2>/dev/null | grep -E ":${rport} " || echo "端口 ${rport} 未被占用"
+        echo ""
+        
+        echo -e "${RED}安装失败，请检查以上诊断信息${NC}"
+        return 1
+    fi
+    
+    fi
+    
+    # Final verification
+    echo ""
+    echo -e "${BLUE}正在验证服务状态...${NC}"
+    sleep 2
+    if systemctl is-active --quiet xray.service; then
+        echo -e "${GREEN}✓ 服务验证成功，正在运行${NC}"
+    else
+        echo -e "${RED}✗ 服务验证失败，请检查日志: journalctl -u xray.service -n 20${NC}"
+        return 1
     fi
     
     echo ""
