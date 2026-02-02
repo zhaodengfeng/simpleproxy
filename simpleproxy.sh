@@ -361,22 +361,37 @@ install_reality() {
     
     # Generate keys - Xray outputs: PrivateKey, Password (PublicKey), Hash32
     # For Reality: PrivateKey is for server, Password (PublicKey) is for client
+    echo -e "${BLUE}生成 X25519 密钥对...${NC}"
     local key_output=$(xray x25519 2>/dev/null)
+    
+    if [ -z "$key_output" ]; then
+        echo -e "${RED}错误: Xray x25519 命令无输出${NC}"
+        return 1
+    fi
+    
     local rprivatekey=$(echo "$key_output" | grep "PrivateKey:" | awk '{print $2}' | tr -d '[:space:]')
     local rpublickey=$(echo "$key_output" | grep "Password:" | awk '{print $2}' | tr -d '[:space:]')
     
+    echo -e "${BLUE}私钥长度: ${#rprivatekey}, 公钥长度: ${#rpublickey}${NC}"
+    
     if [ -z "$rprivatekey" ] || [ ${#rprivatekey} -lt 40 ]; then
-        echo -e "${RED}错误: 无法生成 X25519 私钥${NC}"
+        echo -e "${RED}错误: 无法生成 X25519 私钥 (长度: ${#rprivatekey})${NC}"
+        echo -e "${YELLOW}Xray 输出: ${key_output}${NC}"
         return 1
     fi
     
     if [ -z "$rpublickey" ] || [ ${#rpublickey} -lt 40 ]; then
-        echo -e "${RED}错误: 无法生成 X25519 公钥${NC}"
+        echo -e "${RED}错误: 无法生成 X25519 公钥 (长度: ${#rpublickey})${NC}"
         return 1
     fi
     
+    echo -e "${GREEN}✓ 密钥生成成功${NC}"
+    
     local rshortid=$(openssl rand -hex 4 | tr -d '[:space:]')
-    local ruuid=$(gen_uuid | tr -d '[:space:]')
+    local ruuid=$(gen_uuid)
+    
+    echo -e "${BLUE}UUID: ${ruuid}${NC}"
+    echo -e "${BLUE}Short ID: ${rshortid}${NC}"
     
     # If using custom domain
     if [[ "$use_domain" =~ ^[Yy]$ ]]; then
@@ -527,10 +542,17 @@ EOF
     
     # Validate config before starting
     echo -e "${BLUE}正在验证 Xray 配置...${NC}"
-    if xray -test -config /usr/local/etc/xray/config.json 2>&1 | grep -q "Configuration OK"; then
+    local test_output=$(xray -test -config /usr/local/etc/xray/config.json 2>&1)
+    if echo "$test_output" | grep -q "Configuration OK"; then
         echo -e "${GREEN}✓ 配置验证通过${NC}"
     else
-        echo -e "${YELLOW}配置可能有警告，继续尝试启动...${NC}"
+        echo -e "${RED}✗ 配置验证失败${NC}"
+        echo -e "${YELLOW}错误信息:${NC}"
+        echo "$test_output" | head -5
+        echo ""
+        echo -e "${YELLOW}配置文件内容:${NC}"
+        cat /usr/local/etc/xray/config.json
+        return 1
     fi
     
     # Start service
