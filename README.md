@@ -17,13 +17,13 @@
 ### 安装
 
 ```bash
-wget https://raw.githubusercontent.com/zhaodengfeng/simpleproxy/main/proxy-install.sh && bash proxy-install.sh
+wget https://raw.githubusercontent.com/zhaodengfeng/simpleproxy/main/simpleproxy.sh && bash simpleproxy.sh
 ```
 
 或
 
 ```bash
-bash <(curl -fsSL https://raw.githubusercontent.com/zhaodengfeng/simpleproxy/main/proxy-install.sh)
+bash <(curl -fsSL https://raw.githubusercontent.com/zhaodengfeng/simpleproxy/main/simpleproxy.sh)
 ```
 
 ### 系统要求
