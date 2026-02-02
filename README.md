@@ -2,7 +2,7 @@
 
 一键安装多种代理协议的脚本，支持 Shadowsocks-rust、Reality、Hysteria2、V2Ray+TLS+WS 和 Snell。
 
-**当前版本**: `260202c`
+**当前版本**: `260202d`
 
 ## 支持的协议
 
@@ -10,7 +10,7 @@
 |------|---------|------|------|
 | Shadowsocks-rust | ❌ 不需要 | 可选 | 轻量快速，支持 2022-blake3 加密 |
 | Reality (Xray) | ⚠️ 可选 | 可选 | 无域名时用偷证书模式，有域名时用 TLS |
-| Hysteria2 | ⚠️ 可选 | 可选 | 基于 QUIC，抗封锁能力强 |
+| Hysteria2 | ⚠️ 可选 | 可选 | 基于 QUIC，支持端口跳跃(Port Hopping) |
 | V2Ray+TLS+WS | ✅ 需要 | 可选 (默认443) | 支持 WebSocket 模式，自动申请 SSL 证书 |
 | Snell | ❌ 不需要 | 可选 | Surge 专属协议，支持 v5 和自定义 DNS |
 
@@ -81,7 +81,19 @@ bash <(curl -fsSL https://raw.githubusercontent.com/zhaodengfeng/simpleproxy/mai
 ### 6. 自定义 DNS（Snell v5）
 Snell 安装时支持自定义 DNS 服务器（默认：`8.8.8.8, 1.1.1.1`）。
 
-### 7. 证书自动续期
+### 7. 端口跳跃（Hysteria2 Port Hopping）
+Hysteria2 安装时可选择启用端口跳跃功能（Port Hopping），提升抗封锁能力：
+- 可选启用/禁用（默认：不启用）
+- 自定义起始端口和结束端口
+- 自定义跳跃间隔（默认：30秒）
+- 自动配置防火墙放行端口范围
+
+默认配置（参考官方文档）：
+- 起始端口：主端口 +1
+- 结束端口：主端口 +100
+- 跳跃间隔：30秒
+
+### 8. 证书自动续期
 使用 Let's Encrypt 的协议会自动添加 cron 任务，每天 3 点检查并续期证书。
 
 ### 8. 升级 / 卸载
@@ -169,6 +181,36 @@ SNI: your-domain.com
 vmess://...#V2Ray-WS
 ```
 
+### 安装 Hysteria2（带端口跳跃）
+
+```
+请输入数字: 3
+
+Installing Hysteria2...
+
+请输入端口号(回车或等待15秒随机生成): 45000
+
+是否启用端口跳跃(Port Hopping)? (y/n, 默认n): y
+
+端口跳跃配置 (参考官方文档):
+请输入起始端口 (默认: 45001): [回车]
+请输入结束端口 (默认: 45100): [回车]
+请输入跳跃间隔秒数 (默认: 30): [回车]
+
+端口跳跃: 45001-45100, 间隔 30 秒
+
+正在配置防火墙端口范围...
+
+Hysteria2 安装完成!
+=========== Hysteria2 配置信息 ===========
+服务器地址: 1.2.3.4:45000
+密码: xxxxxxxxxxxxxxxx
+TLS: 自签名证书 (需跳过验证)
+端口跳跃: 45001-45100 (间隔 30秒)
+
+hysteria2://xxx@1.2.3.4:45000?insecure=1&hop=45001-45100&hop_interval=30#Hysteria2
+```
+
 ## 客户端配置路径
 
 安装完成后，配置信息保存在：
@@ -210,6 +252,21 @@ vless://uuid@1.2.3.4:port?security=reality&sni=www.microsoft.com&pbk=xxx&sid=xxx
 
 ```
 hysteria2://password@1.2.3.4:port?insecure=1#Hysteria2
+```
+
+### Hysteria2（带端口跳跃）
+
+```
+hysteria2://password@1.2.3.4:mainport?insecure=1&hop=45001-45100&hop_interval=30#Hysteria2
+```
+
+服务端配置：
+```yaml
+listen: :45000,:45001-45100
+auth:
+  type: password
+  password: your-password
+hopInterval: 30s
 ```
 
 ### V2Ray+TLS+WS
@@ -290,6 +347,7 @@ chmod +x simpleproxy.sh
 
 | 版本 | 日期 | 更新内容 |
 |------|------|---------|
+| 260202d | 2025-02-02 | 新增 Hysteria2 端口跳跃(Port Hopping)支持 |
 | 260202c | 2025-02-02 | 修复 Reality/V2Ray+WS 状态检测冲突，优化 Shadowsocks 启动逻辑 |
 | 260202b | 2025-02-02 | 修复 Shadowsocks 2022-blake3 密钥生成 |
 | 260202 | 2025-02-02 | 初始版本，支持 5 种代理协议 |
