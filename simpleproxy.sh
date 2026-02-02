@@ -1060,23 +1060,19 @@ install_snell() {
             ;;
     esac
     
-    # Get latest version from GitHub releases redirect (no API)
-    echo -e "${BLUE}获取 Snell 最新版本...${NC}"
-    local snell_version=$(curl -sI "https://github.com/surge-networks/snell/releases/latest" | grep -i location | sed -E 's/.*tag\/(v[0-9.]+).*/\1/')
-    if [ -z "$snell_version" ]; then
-        snell_version="v4.1.1"
-        echo -e "${YELLOW}获取版本失败，使用默认版本 ${snell_version}${NC}"
-    else
-        echo -e "${GREEN}最新版本: ${snell_version}${NC}"
-    fi
+    # Snell official download source (not GitHub)
+    local snell_version="v5.0.1"
+    echo -e "${BLUE}使用 Snell 官方版本 ${snell_version}${NC}"
     
     cd /tmp
     echo -e "${BLUE}下载 Snell ${snell_version}...${NC}"
-    local download_url="https://github.com/surge-networks/snell/releases/download/${snell_version}/snell-server-${snell_version}-linux-${download_arch}.zip"
+    # Official Snell download source
+    local download_url="https://dl.nssurge.com/snell/snell-server-${snell_version}-linux-${download_arch}.zip"
     
     if ! wget -q --show-progress "$download_url" -O snell.zip 2>/dev/null; then
-        echo -e "${YELLOW}主链接失败，尝试备用链接...${NC}"
-        download_url="https://github.com/surge-networks/snell/releases/download/v4.0.1/snell-server-v4.0.1-linux-${download_arch}.zip"
+        echo -e "${YELLOW}官方源失败，尝试备用链接...${NC}"
+        # Fallback to GitHub backup
+        download_url="https://raw.githubusercontent.com/xOS/Others/master/snell/${snell_version}/snell-server-${snell_version}-linux-${download_arch}.zip"
         if ! wget -q --show-progress "$download_url" -O snell.zip 2>/dev/null; then
             echo -e "${RED}下载失败，请检查网络或手动下载安装包${NC}"
             return 1
@@ -1181,8 +1177,19 @@ upgrade_snell() {
     # Fixed version, no API call (avoid GitHub rate limit)
     local snell_version="v4.1.1"
     
+    # Fixed version for upgrade (official source)
+    local snell_version="v5.0.1"
+    
     cd /tmp
-    wget -q "https://github.com/surge-networks/snell/releases/download/${snell_version}/snell-server-${snell_version}-linux-${download_arch}.zip" -O snell.zip
+    # Official Snell download source
+    local download_url="https://dl.nssurge.com/snell/snell-server-${snell_version}-linux-${download_arch}.zip"
+    
+    if ! wget -q "$download_url" -O snell.zip 2>/dev/null; then
+        # Fallback to GitHub backup
+        download_url="https://raw.githubusercontent.com/xOS/Others/master/snell/${snell_version}/snell-server-${snell_version}-linux-${download_arch}.zip"
+        wget -q "$download_url" -O snell.zip
+    fi
+    
     unzip -o snell.zip
     mv snell-server /usr/local/bin/
     chmod +x /usr/local/bin/snell-server
