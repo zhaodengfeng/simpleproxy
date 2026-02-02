@@ -11,7 +11,7 @@ if [[ $EUID -ne 0 ]]; then
 fi
 
 # Script version (format: YYYYMMDD.N)
-SCRIPT_VERSION="260202c"
+SCRIPT_VERSION="260202d"
 
 # Color codes
 RED='\033[0;31m'
@@ -814,6 +814,55 @@ install_hy2() {
         return 1
     fi
     
+    # Ask for port hopping
+    echo ""
+    read -p "是否启用端口跳跃(Port Hopping)? (y/n, 默认n): " use_hop
+    local hop_start=""
+    local hop_end=""
+    local hop_interval=""
+    
+    if [[ "$use_hop" =~ ^[Yy]$ ]]; then
+        echo -e "${YELLOW}端口跳跃配置 (参考官方文档):${NC}"
+        
+        # Ask for hop start port
+        read -t 15 -p "请输入起始端口 (默认: $((hyport+1))): " hop_start_input
+        if [ -n "$hop_start_input" ]; then
+            hop_start=$hop_start_input
+        else
+            hop_start=$((hyport+1))
+        fi
+        
+        # Ask for hop end port
+        read -t 15 -p "请输入结束端口 (默认: $((hyport+100))): " hop_end_input
+        if [ -n "$hop_end_input" ]; then
+            hop_end=$hop_end_input
+        else
+            hop_end=$((hyport+100))
+        fi
+        
+        # Ask for hop interval
+        read -t 15 -p "请输入跳跃间隔秒数 (默认: 30): " hop_interval_input
+        if [ -n "$hop_interval_input" ]; then
+            hop_interval=$hop_interval_input
+        else
+            hop_interval="30"
+        fi
+        
+        echo -e "${GREEN}端口跳跃: ${hop_start}-${hop_end}, 间隔 ${hop_interval} 秒${NC}"
+        
+        # Open firewall ports for hopping range
+        echo -e "${BLUE}正在配置防火墙端口范围...${NC}"
+        local os_type=$(detect_os)
+        if command -v ufw &>/dev/null; then
+            ufw allow ${hop_start}:${hop_end}/tcp 2>/dev/null || true
+            ufw allow ${hop_start}:${hop_end}/udp 2>/dev/null || true
+        elif command -v firewall-cmd &>/dev/null; then
+            firewall-cmd --add-port=${hop_start}-${hop_end}/tcp --permanent 2>/dev/null || true
+            firewall-cmd --add-port=${hop_start}-${hop_end}/udp --permanent 2>/dev/null || true
+            firewall-cmd --reload 2>/dev/null || true
+        fi
+    fi
+    
     # Ask if user wants to use custom domain
     read -p "是否使用自己的域名? (y/n, 默认n): " use_domain
     
@@ -835,9 +884,14 @@ install_hy2() {
                 # Setup auto-renewal
                 setup_cert_renewal "$hydomain"
                 
-                cat > /etc/hysteria/config.yaml <<EOF
-listen: :${hyport}
-
+                # Generate config with optional port hopping
+            local listen_line="listen: :${hyport}"
+            if [ -n "$hop_start" ] && [ -n "$hop_end" ]; then
+                listen_line="listen: :${hyport},:${hop_start}-${hop_end}"
+            fi
+            
+            cat > /etc/hysteria/config.yaml <<EOF
+${listen_line}
 auth:
   type: password
   password: ${hypass}
@@ -851,6 +905,10 @@ masquerade:
 tls:
   cert: /etc/letsencrypt/live/${hydomain}/fullchain.pem
   key: /etc/letsencrypt/live/${hydomain}/privkey.pem
+$(if [ -n "$hop_interval" ]; then echo "
+# 端口跳跃配置
+hopInterval: ${hop_interval}s
+"; fi)
 EOF
             } || {
                 echo -e "${YELLOW}证书申请失败，将使用自签名证书${NC}"
@@ -861,9 +919,14 @@ EOF
     
     # If not using domain cert, use self-signed
     if [ -z "$hydomain" ] || [ "$hyinsecure" == "1" ]; then
+        # Generate config with optional port hopping
+        local listen_line="listen: :${hyport}"
+        if [ -n "$hop_start" ] && [ -n "$hop_end" ]; then
+            listen_line="listen: :${hyport},:${hop_start}-${hop_end}"
+        fi
+        
         cat > /etc/hysteria/config.yaml <<EOF
-listen: :${hyport}
-
+${listen_line}
 auth:
   type: password
   password: ${hypass}
@@ -877,6 +940,10 @@ masquerade:
 tls:
   cert: /etc/hysteria/server.crt
   key: /etc/hysteria/server.key
+$(if [ -n "$hop_interval" ]; then echo "
+# 端口跳跃配置
+hopInterval: ${hop_interval}s
+"; fi)
 EOF
         
         # Generate self-signed certificate
@@ -927,13 +994,21 @@ EOF
     fi
     
     # Save client config
+    local hop_info=""
+    local hop_url_param=""
+    if [ -n "$hop_start" ] && [ -n "$hop_end" ]; then
+        hop_info="端口跳跃: ${hop_start}-${hop_end} (间隔 ${hop_interval}秒)"
+        hop_url_param="&hop_interval=${hop_interval}"
+    fi
+    
     cat > /etc/hysteria/hyclient.json <<EOF
 =========== Hysteria2 配置信息 ===========
 服务器地址: ${hyserver}:${hyport}
 密码: ${hypass}
 $( [ -n "$hydomain" ] && [ "$hyinsecure" == "0" ] && echo "TLS: 已启用 (Let's Encrypt)" || echo "TLS: 自签名证书 (需跳过验证)" )
+${hop_info}
 
-hysteria2://${hypass}@${hyserver}:${hyport}$( [ "$hyinsecure" == "1" ] && echo "?insecure=1" || echo "" )#Hysteria2
+hysteria2://${hypass}@${hyserver}:${hyport}$( [ "$hyinsecure" == "1" ] && echo "?insecure=1" || echo "" )$( [ -n "$hop_start" ] && echo "&hop=${hop_start}-${hop_end}&hop_interval=${hop_interval}" || echo "" )#Hysteria2
 EOF
     
     echo ""
