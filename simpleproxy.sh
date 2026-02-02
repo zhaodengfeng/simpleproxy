@@ -889,9 +889,15 @@ install_anytls() {
     # Apply SSL certificate
     apply_ssl "$DOMAIN" || return 1
     
-    # Use fixed version to avoid GitHub access issues
-    local anytls_version="v0.11.0"
-    echo -e "${BLUE}AnyTLS 版本: ${anytls_version}${NC}"
+    # Get latest version from GitHub releases (use -L to follow redirects)
+    echo -e "${BLUE}获取 AnyTLS 最新版本...${NC}"
+    local anytls_version=$(curl -sIL "https://github.com/anytls/sink/releases/latest" 2>/dev/null | grep -i location | sed -E 's/.*tag\/(v[0-9.]+).*/\1/' | tail -1)
+    if [ -z "$anytls_version" ]; then
+        anytls_version="v0.11.0"
+        echo -e "${YELLOW}获取版本失败，使用默认版本 ${anytls_version}${NC}"
+    else
+        echo -e "${GREEN}最新版本: ${anytls_version}${NC}"
+    fi
     
     local arch=$(uname -m)
     local download_arch="x86_64-unknown-linux-musl"
