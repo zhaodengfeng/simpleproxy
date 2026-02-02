@@ -25,8 +25,10 @@ gen_random() {
 }
 
 gen_uuid() {
-    local uuid=$(cat /proc/sys/kernel/random/uuid 2>/dev/null)
-    if [ -z "$uuid" ]; then
+    local uuid=$(cat /proc/sys/kernel/random/uuid 2>/dev/null | head -1 | tr -d '[:space:]')
+    # Validate UUID format (should be 36 chars with 4 dashes)
+    if [ -z "$uuid" ] || [ ${#uuid} -ne 36 ] || ! echo "$uuid" | grep -qE '^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'; then
+        # Fallback: manually generate UUID v4
         uuid=$(tr -dc 'a-f0-9' < /dev/urandom | head -c 8)
         uuid="${uuid}-$(tr -dc 'a-f0-9' < /dev/urandom | head -c 4)"
         uuid="${uuid}-4$(tr -dc 'a-f0-9' < /dev/urandom | head -c 3)"
@@ -392,6 +394,19 @@ install_reality() {
     
     echo -e "${BLUE}UUID: ${ruuid}${NC}"
     echo -e "${BLUE}Short ID: ${rshortid}${NC}"
+    
+    # Validate all variables before generating config
+    if [ -z "$ruuid" ] || [ ${#ruuid} -ne 36 ]; then
+        echo -e "${RED}错误: UUID 格式不正确 (长度: ${#ruuid})${NC}"
+        return 1
+    fi
+    
+    if [ -z "$rprivatekey" ] || [ ${#rprivatekey} -lt 40 ]; then
+        echo -e "${RED}错误: 私钥无效，无法生成配置${NC}"
+        return 1
+    fi
+    
+    echo -e "${GREEN}✓ 所有参数验证通过${NC}"
     
     # If using custom domain
     if [[ "$use_domain" =~ ^[Yy]$ ]]; then
