@@ -130,6 +130,32 @@ apply_ssl() {
     
     echo -e "${BLUE}正在为 ${domain} 申请SSL证书...${NC}"
     
+    # Check if certificate already exists and is valid
+    if [ -f "/etc/letsencrypt/live/${domain}/fullchain.pem" ] && [ -f "/etc/letsencrypt/live/${domain}/privkey.pem" ]; then
+        echo -e "${YELLOW}检测到已有证书，检查有效性...${NC}"
+        local cert_end_date=$(openssl x509 -in /etc/letsencrypt/live/${domain}/fullchain.pem -noout -enddate 2>/dev/null | cut -d= -f2)
+        if [ -n "$cert_end_date" ]; then
+            local cert_epoch=$(date -d "$cert_end_date" +%s 2>/dev/null)
+            local current_epoch=$(date +%s)
+            local days_left=$(( (cert_epoch - current_epoch) / 86400 ))
+            
+            if [ "$days_left" -gt 30 ]; then
+                echo -e "${GREEN}✓ 已有证书有效，还剩 ${days_left} 天到期，复用现有证书${NC}"
+                
+                # Ensure Xray certs are up to date
+                mkdir -p /usr/local/etc/xray/certs
+                cp /etc/letsencrypt/live/${domain}/fullchain.pem /usr/local/etc/xray/certs/${domain}.crt
+                cp /etc/letsencrypt/live/${domain}/privkey.pem /usr/local/etc/xray/certs/${domain}.key
+                chmod 644 /usr/local/etc/xray/certs/${domain}.crt
+                chmod 644 /usr/local/etc/xray/certs/${domain}.key
+                
+                return 0
+            else
+                echo -e "${YELLOW}证书将在 ${days_left} 天后过期，重新申请${NC}"
+            fi
+        fi
+    fi
+    
     # Create directory
     mkdir -p /etc/letsencrypt/live/$domain
     
@@ -889,9 +915,26 @@ install_anytls() {
     # Apply SSL certificate
     apply_ssl "$DOMAIN" || return 1
     
-    # Get latest version from GitHub releases (use -L to follow redirects)
+    # Get latest version from GitHub releases with better error handling
     echo -e "${BLUE}获取 AnyTLS 最新版本...${NC}"
-    local anytls_version=$(curl -sIL "https://github.com/anytls/sink/releases/latest" 2>/dev/null | grep -i location | sed -E 's/.*tag\/(v[0-9.]+).*/\1/' | tail -1)
+    local anytls_version=""
+    
+    # Try multiple methods to get version
+    local version_methods=(
+        "curl -sIL 'https://github.com/anytls/sink/releases/latest' 2>/dev/null | grep -i location | sed -E 's/.*tag\/(v[0-9.]+).*/\1/' | tail -1"
+        "curl -sL 'https://api.github.com/repos/anytls/sink/releases/latest' 2>/dev/null | grep -oE '"tag_name": "v[0-9.]+"' | head -1 | grep -oE 'v[0-9.]+'"
+        "wget -qO- 'https://api.github.com/repos/anytls/sink/releases/latest' 2>/dev/null | grep -oE '"tag_name": "v[0-9.]+"' | head -1 | grep -oE 'v[0-9.]+'"
+    )
+    
+    for method in "${version_methods[@]}"; do
+        if [ -z "$anytls_version" ]; then
+            anytls_version=$(eval "$method" 2>/dev/null)
+            if [ -n "$anytls_version" ]; then
+                break
+            fi
+        fi
+    done
+    
     if [ -z "$anytls_version" ]; then
         anytls_version="v0.11.0"
         echo -e "${YELLOW}获取版本失败，使用默认版本 ${anytls_version}${NC}"
