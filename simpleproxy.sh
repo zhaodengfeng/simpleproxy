@@ -347,14 +347,17 @@ install_reality() {
     
     echo -e "${GREEN}Xray 已安装，版本: $(xray version | head -1)${NC}"
     
-    # Generate keys - ensure no whitespace
-    local rprivatekey=$(xray x25519 2>/dev/null | grep "Private key:" | awk '{print $3}' | tr -d '[:space:]')
+    # Generate keys - Xray outputs: PrivateKey, Password (PublicKey), Hash32
+    # For Reality: PrivateKey is for server, Password (PublicKey) is for client
+    local key_output=$(xray x25519 2>/dev/null)
+    local rprivatekey=$(echo "$key_output" | grep "PrivateKey:" | awk '{print $2}' | tr -d '[:space:]')
+    local rpublickey=$(echo "$key_output" | grep "Password:" | awk '{print $2}' | tr -d '[:space:]')
+    
     if [ -z "$rprivatekey" ] || [ ${#rprivatekey} -lt 40 ]; then
         echo -e "${RED}错误: 无法生成 X25519 私钥${NC}"
         return 1
     fi
     
-    local rpublickey=$(xray x25519 -i "$rprivatekey" 2>/dev/null | grep "Public key:" | awk '{print $3}' | tr -d '[:space:]')
     if [ -z "$rpublickey" ] || [ ${#rpublickey} -lt 40 ]; then
         echo -e "${RED}错误: 无法生成 X25519 公钥${NC}"
         return 1
