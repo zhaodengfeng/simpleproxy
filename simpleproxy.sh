@@ -274,17 +274,32 @@ install_ssrust() {
     echo " 6. 2022-blake3-chacha20-poly1305"
     read -t 15 -p "请输入数字(回车或等待15秒使用默认): " ss_method_choice
     
+    # Key length requirements for different methods:
+    # Standard methods: any password works
+    # 2022-blake3-aes-128-gcm: needs 16 bytes key (base64 = 24 chars with padding)
+    # 2022-blake3-aes-256-gcm: needs 32 bytes key (base64 = 44 chars with padding)  
+    # 2022-blake3-chacha20-poly1305: needs 32 bytes key (base64 = 44 chars with padding)
     local smethod="2022-blake3-aes-128-gcm"
-    local sspass_len=32
+    local use_base64_key=false
+    local key_bytes=16
     case "$ss_method_choice" in
-        1) smethod="aes-256-gcm"; sspass_len=16 ;;
-        2) smethod="aes-128-gcm"; sspass_len=16 ;;
-        3) smethod="chacha20-ietf-poly1305"; sspass_len=16 ;;
-        4|"") smethod="2022-blake3-aes-128-gcm"; sspass_len=32 ;;
-        5) smethod="2022-blake3-aes-256-gcm"; sspass_len=44 ;;
-        6) smethod="2022-blake3-chacha20-poly1305"; sspass_len=44 ;;
-        *) echo -e "${YELLOW}无效选项，使用默认 2022-blake3-aes-128-gcm${NC}"; smethod="2022-blake3-aes-128-gcm"; sspass_len=32 ;;
+        1) smethod="aes-256-gcm"; use_base64_key=false ;;
+        2) smethod="aes-128-gcm"; use_base64_key=false ;;
+        3) smethod="chacha20-ietf-poly1305"; use_base64_key=false ;;
+        4|"") smethod="2022-blake3-aes-128-gcm"; use_base64_key=true; key_bytes=16 ;;
+        5) smethod="2022-blake3-aes-256-gcm"; use_base64_key=true; key_bytes=32 ;;
+        6) smethod="2022-blake3-chacha20-poly1305"; use_base64_key=true; key_bytes=32 ;;
+        *) echo -e "${YELLOW}无效选项，使用默认 2022-blake3-aes-128-gcm${NC}"; smethod="2022-blake3-aes-128-gcm"; use_base64_key=true; key_bytes=16 ;;
     esac
+    
+    # Generate appropriate password/key
+    if [ "$use_base64_key" = true ]; then
+        # Generate random bytes and base64 encode for 2022-blake3 methods
+        sspass=$(openssl rand -base64 $key_bytes | tr -d '\n')
+    else
+        # Standard methods use regular password
+        sspass=$(gen_random 16)
+    fi
     
     echo -e "${GREEN}使用加密方式: ${smethod}${NC}"
     
@@ -1679,6 +1694,5 @@ show_menu() {
 # Main loop
 while true; do
     show_menu
-    echo ""
-    read -p "按回车键继续..."
+    # Note: Submenus already handle "press any key to continue"
 done
