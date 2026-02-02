@@ -322,13 +322,38 @@ install_reality() {
     local server_ip=$(getIP)
     local rsni="www.microsoft.com"
     local rdomain=""
+    local xray_installed=false
     
     # Install Xray if not installed
     if ! command -v xray &> /dev/null; then
+        echo -e "${BLUE}正在安装 Xray...${NC}"
         bash -c "$(curl -L https://github.com/XTLS/Xray-install/raw/main/install-release.sh)" @ install
+        xray_installed=true
     fi
     
+    # Ensure xray is in PATH
+    export PATH="/usr/local/bin:$PATH"
+    
+    # Wait for xray to be available
+    local retry_count=0
+    while ! command -v xray &> /dev/null && [ $retry_count -lt 5 ]; do
+        sleep 1
+        retry_count=$((retry_count + 1))
+    done
+    
+    if ! command -v xray &> /dev/null; then
+        echo -e "${RED}错误: Xray 安装失败或命令不可用${NC}"
+        return 1
+    fi
+    
+    echo -e "${GREEN}Xray 已安装，版本: $(xray version | head -1)${NC}"
+    
+    # Generate keys
     local rprivatekey=$(xray x25519 2>/dev/null | grep "Private key:" | awk '{print $3}')
+    if [ -z "$rprivatekey" ]; then
+        echo -e "${RED}错误: 无法生成 X25519 密钥${NC}"
+        return 1
+    fi
     local rpublickey=$(echo "$rprivatekey" | xargs -I {} xray x25519 -i {} 2>/dev/null | grep "Public key:" | awk '{print $3}')
     local rshortid=$(openssl rand -hex 4)
     
@@ -353,6 +378,9 @@ install_reality() {
     fi
     
     mkdir -p /usr/local/etc/xray
+    
+    # Stop xray service before modifying config
+    systemctl stop xray.service 2>/dev/null || true
     
     # Build realitySettings based on whether we have a domain
     if [ -n "$rdomain" ] && [ -f "/etc/letsencrypt/live/$rdomain/fullchain.pem" ]; then
@@ -472,17 +500,20 @@ vless://${ruuid}@${server_ip}:${rport}?security=reality&sni=${rsni}&pbk=${rpubli
 EOF
     fi
     
+    # Ensure service is properly configured
     systemctl daemon-reload
     systemctl enable xray.service
-    sleep 1
-    systemctl restart xray.service
+    
+    # Start service
+    echo -e "${BLUE}正在启动 Xray 服务...${NC}"
+    systemctl start xray.service
+    sleep 3
     
     # Check if service is running
-    sleep 3
     if systemctl is-active --quiet xray.service; then
         echo -e "${GREEN}✓ Reality/Xray 服务已成功启动${NC}"
     else
-        echo -e "${RED}✗ Reality/Xray 服务启动失败，正在重试...${NC}"
+        echo -e "${RED}✗ 第一次启动失败，正在重试...${NC}"
         systemctl daemon-reload
         sleep 1
         systemctl restart xray.service
@@ -490,7 +521,9 @@ EOF
         if systemctl is-active --quiet xray.service; then
             echo -e "${GREEN}✓ Reality/Xray 服务已成功启动${NC}"
         else
-            echo -e "${RED}✗ Reality/Xray 服务启动失败，请手动检查: journalctl -u xray.service${NC}"
+            echo -e "${RED}✗ Reality/Xray 服务启动失败${NC}"
+            echo -e "${YELLOW}请检查日志: journalctl -u xray.service -n 20${NC}"
+            echo -e "${YELLOW}检查配置: xray -test -config /usr/local/etc/xray/config.json${NC}"
         fi
     fi
     
