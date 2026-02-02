@@ -131,13 +131,22 @@ apply_ssl() {
     # Create directory
     mkdir -p /etc/letsencrypt/live/$domain
     
+    # Stop services that may use port 80
+    echo -e "${BLUE}停止可能占用80端口的服务...${NC}"
+    systemctl stop nginx 2>/dev/null || true
+    systemctl stop apache2 2>/dev/null || true
+    systemctl stop httpd 2>/dev/null || true
+    sleep 2
+    
     # Issue certificate using standalone mode
     ~/.acme.sh/acme.sh --issue -d $domain --standalone --keylength ec-256 --force
+    local issue_result=$?
     
-    if [ $? -ne 0 ]; then
+    if [ $issue_result -ne 0 ]; then
         echo -e "${RED}证书申请失败，请检查:${NC}"
         echo "1. 域名是否正确解析到本机IP"
-        echo "2. 80端口是否被占用"
+        echo "2. 80端口是否被其他程序占用"
+        echo "3. 防火墙是否放行80端口"
         return 1
     fi
     
