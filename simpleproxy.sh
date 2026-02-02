@@ -294,8 +294,11 @@ install_ssrust() {
     
     # Generate appropriate password/key
     if [ "$use_base64_key" = true ]; then
-        # Generate random bytes and base64 encode for 2022-blake3 methods
-        sspass=$(openssl rand -base64 $key_bytes | tr -d '\n')
+        # Generate hex key for 2022-blake3 methods (more reliable than base64 in JSON)
+        # 2022-blake3-aes-128-gcm: 16 bytes = 32 hex chars
+        # 2022-blake3-aes-256-gcm: 32 bytes = 64 hex chars
+        local hex_len=$((key_bytes * 2))
+        sspass=$(openssl rand -hex $key_bytes)
     else
         # Standard methods use regular password
         sspass=$(gen_random 16)
