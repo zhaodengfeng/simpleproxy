@@ -11,7 +11,7 @@ if [[ $EUID -ne 0 ]]; then
 fi
 
 # Script version (format: YYYYMMDD.N)
-SCRIPT_VERSION="260202"
+SCRIPT_VERSION="260202c"
 
 # Color codes
 RED='\033[0;31m'
