@@ -356,26 +356,56 @@ RestartSec=5s
 WantedBy=multi-user.target
 EOF
     
+    # Ensure service is properly configured
     systemctl daemon-reload
     systemctl enable shadowsocks.service
-    sleep 1
-    systemctl start shadowsocks.service
     
-    # Check if service is running
+    # Sync to ensure config is written to disk
+    sync
+    sleep 1
+    
+    # Validate config
+    echo -e "${BLUE}正在验证 Shadowsocks 配置...${NC}"
+    if ! /usr/local/bin/ssserver -t -c /etc/shadowsocks/config.json 2>&1 | grep -q "loaded successfully"; then
+        echo -e "${YELLOW}配置验证警告，继续尝试启动...${NC}"
+    fi
+    
+    # Start service
+    echo -e "${BLUE}正在启动 Shadowsocks 服务...${NC}"
+    systemctl start shadowsocks.service
     sleep 3
-    if systemctl is-active --quiet shadowsocks.service; then
-        echo -e "${GREEN}✓ Shadowsocks-rust 服务已成功启动${NC}"
-    else
-        echo -e "${RED}✗ Shadowsocks-rust 服务启动失败，正在重试...${NC}"
-        systemctl daemon-reload
-        sleep 1
-        systemctl restart shadowsocks.service
-        sleep 3
+    
+    # Check if service is running (retry up to 3 times)
+    local retry_count=0
+    local max_retries=3
+    while [ $retry_count -lt $max_retries ]; do
         if systemctl is-active --quiet shadowsocks.service; then
             echo -e "${GREEN}✓ Shadowsocks-rust 服务已成功启动${NC}"
-        else
-            echo -e "${RED}✗ Shadowsocks-rust 服务启动失败，请手动检查: journalctl -u shadowsocks.service${NC}"
+            break
         fi
+        retry_count=$((retry_count + 1))
+        if [ $retry_count -lt $max_retries ]; then
+            echo -e "${YELLOW}等待服务启动... (${retry_count}/${max_retries})${NC}"
+            sleep 3
+            systemctl start shadowsocks.service 2>/dev/null || true
+        fi
+    done
+    
+    if [ $retry_count -eq $max_retries ]; then
+        echo -e "${RED}✗ Shadowsocks-rust 服务启动失败${NC}"
+        echo ""
+        echo -e "${YELLOW}=== 诊断信息 ===${NC}"
+        echo -e "${YELLOW}1. 检查二进制文件:${NC}"
+        ls -la /usr/local/bin/ssserver 2>&1
+        echo ""
+        echo -e "${YELLOW}2. 检查配置文件:${NC}"
+        cat /etc/shadowsocks/config.json
+        echo ""
+        echo -e "${YELLOW}3. 查看服务状态:${NC}"
+        systemctl status shadowsocks.service --no-pager 2>&1 | head -10
+        echo ""
+        echo -e "${YELLOW}4. 查看详细日志:${NC}"
+        journalctl -u shadowsocks.service -n 20 --no-pager 2>&1
     fi
     
     # Save client config
@@ -1617,8 +1647,15 @@ show_menu() {
     clear
     check_installed
     
+    # Calculate padding for centering
+    local title="SIMPLEPROXY v${SCRIPT_VERSION}"
+    local width=38
+    local padding=$(( (width - ${#title}) / 2 ))
+    local left_pad=$(printf '%*s' "$padding" '')
+    local right_pad=$(printf '%*s' $((width - padding - ${#title})) '')
+    
     echo -e "${YELLOW}╔══════════════════════════════════════╗${NC}"
-    echo -e "${YELLOW}║         SIMPLEPROXY v${SCRIPT_VERSION}        ║${NC}"
+    echo -e "${YELLOW}║${left_pad}${title}${right_pad}║${NC}"
     echo -e "${YELLOW}╚══════════════════════════════════════╝${NC}"
     echo ""
     echo " 1. 安装代理"
