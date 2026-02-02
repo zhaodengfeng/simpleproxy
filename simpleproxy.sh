@@ -11,7 +11,7 @@ if [[ $EUID -ne 0 ]]; then
 fi
 
 # Script version (format: YYYYMMDD.N)
-SCRIPT_VERSION="260202b"
+SCRIPT_VERSION="260202"
 
 # Color codes
 RED='\033[0;31m'
@@ -266,48 +266,48 @@ install_ssrust() {
     # Encryption method selection
     echo ""
     echo -e "${YELLOW}请选择加密方式:${NC}"
-    echo " 1. aes-256-gcm (默认)"
-    echo " 2. aes-128-gcm"
-    echo " 3. chacha20-ietf-poly1305"
-    echo " 4. 2022-blake3-aes-128-gcm"
-    echo " 5. 2022-blake3-aes-256-gcm"
-    echo " 6. 2022-blake3-chacha20-poly1305"
+    echo " 1. 2022-blake3-aes-128-gcm (默认)"
+    echo " 2. 2022-blake3-aes-256-gcm"
+    echo " 3. 2022-blake3-chacha20-poly1305"
+    echo " 4. aes-256-gcm"
+    echo " 5. aes-128-gcm"
+    echo " 6. chacha20-ietf-poly1305"
     read -t 15 -p "请输入数字(回车或等待15秒使用默认): " ss_method_choice
     
-    local smethod="aes-256-gcm"
+    local smethod="2022-blake3-aes-128-gcm"
     local sspass=""
     case "$ss_method_choice" in
         1|"") 
-            smethod="aes-256-gcm"
-            sspass=$(gen_random 16)
-            ;;
-        2) 
-            smethod="aes-128-gcm"
-            sspass=$(gen_random 16)
-            ;;
-        3) 
-            smethod="chacha20-ietf-poly1305"
-            sspass=$(gen_random 16)
-            ;;
-        4) 
             smethod="2022-blake3-aes-128-gcm"
             # 16 bytes = 24 base64 chars
             sspass=$(dd if=/dev/urandom bs=16 count=1 2>/dev/null | base64 -w 0)
             ;;
-        5) 
+        2) 
             smethod="2022-blake3-aes-256-gcm"
             # 32 bytes = 44 base64 chars
             sspass=$(dd if=/dev/urandom bs=32 count=1 2>/dev/null | base64 -w 0)
             ;;
-        6) 
+        3) 
             smethod="2022-blake3-chacha20-poly1305"
             # 32 bytes = 44 base64 chars
             sspass=$(dd if=/dev/urandom bs=32 count=1 2>/dev/null | base64 -w 0)
             ;;
-        *) 
-            echo -e "${YELLOW}无效选项，使用默认 aes-256-gcm${NC}"
+        4) 
             smethod="aes-256-gcm"
             sspass=$(gen_random 16)
+            ;;
+        5) 
+            smethod="aes-128-gcm"
+            sspass=$(gen_random 16)
+            ;;
+        6) 
+            smethod="chacha20-ietf-poly1305"
+            sspass=$(gen_random 16)
+            ;;
+        *) 
+            echo -e "${YELLOW}无效选项，使用默认 2022-blake3-aes-128-gcm${NC}"
+            smethod="2022-blake3-aes-128-gcm"
+            sspass=$(dd if=/dev/urandom bs=16 count=1 2>/dev/null | base64 -w 0)
             ;;
     esac
     
@@ -381,35 +381,26 @@ EOF
     # Ensure service is properly configured
     systemctl daemon-reload
     systemctl enable shadowsocks.service
-    
-    # Sync to ensure config is written to disk
-    sync
     sleep 1
     
-    # Validate config
-    echo -e "${BLUE}正在验证 Shadowsocks 配置...${NC}"
-    if ! /usr/local/bin/ssserver -t -c /etc/shadowsocks/config.json 2>&1 | grep -q "loaded successfully"; then
-        echo -e "${YELLOW}配置验证警告，继续尝试启动...${NC}"
-    fi
-    
-    # Start service
+    # Start service with retry logic
     echo -e "${BLUE}正在启动 Shadowsocks 服务...${NC}"
-    systemctl start shadowsocks.service
-    sleep 3
-    
-    # Check if service is running (retry up to 3 times)
     local retry_count=0
     local max_retries=3
+    
     while [ $retry_count -lt $max_retries ]; do
+        systemctl restart shadowsocks.service 2>/dev/null || systemctl start shadowsocks.service 2>/dev/null
+        sleep 2
+        
         if systemctl is-active --quiet shadowsocks.service; then
             echo -e "${GREEN}✓ Shadowsocks-rust 服务已成功启动${NC}"
             break
         fi
+        
         retry_count=$((retry_count + 1))
         if [ $retry_count -lt $max_retries ]; then
-            echo -e "${YELLOW}等待服务启动... (${retry_count}/${max_retries})${NC}"
-            sleep 3
-            systemctl start shadowsocks.service 2>/dev/null || true
+            echo -e "${YELLOW}第 ${retry_count} 次启动尝试失败，重试中...${NC}"
+            sleep 2
         fi
     done
     
