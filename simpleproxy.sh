@@ -234,16 +234,19 @@ EOF
     
     systemctl daemon-reload
     systemctl enable shadowsocks.service
+    sleep 1
     systemctl start shadowsocks.service
     
     # Check if service is running
-    sleep 2
+    sleep 3
     if systemctl is-active --quiet shadowsocks.service; then
         echo -e "${GREEN}✓ Shadowsocks-rust 服务已成功启动${NC}"
     else
         echo -e "${RED}✗ Shadowsocks-rust 服务启动失败，正在重试...${NC}"
+        systemctl daemon-reload
+        sleep 1
         systemctl restart shadowsocks.service
-        sleep 2
+        sleep 3
         if systemctl is-active --quiet shadowsocks.service; then
             echo -e "${GREEN}✓ Shadowsocks-rust 服务已成功启动${NC}"
         else
@@ -469,17 +472,21 @@ vless://${ruuid}@${server_ip}:${rport}?security=reality&sni=${rsni}&pbk=${rpubli
 EOF
     fi
     
-    systemctl restart xray.service
+    systemctl daemon-reload
     systemctl enable xray.service
+    sleep 1
+    systemctl restart xray.service
     
     # Check if service is running
-    sleep 2
+    sleep 3
     if systemctl is-active --quiet xray.service; then
         echo -e "${GREEN}✓ Reality/Xray 服务已成功启动${NC}"
     else
         echo -e "${RED}✗ Reality/Xray 服务启动失败，正在重试...${NC}"
+        systemctl daemon-reload
+        sleep 1
         systemctl restart xray.service
-        sleep 2
+        sleep 3
         if systemctl is-active --quiet xray.service; then
             echo -e "${GREEN}✓ Reality/Xray 服务已成功启动${NC}"
         else
@@ -635,16 +642,19 @@ EOF
     
     systemctl daemon-reload
     systemctl enable hysteria-server.service
+    sleep 1
     systemctl start hysteria-server.service
     
     # Check if service is running
-    sleep 2
+    sleep 3
     if systemctl is-active --quiet hysteria-server.service; then
         echo -e "${GREEN}✓ Hysteria2 服务已成功启动${NC}"
     else
         echo -e "${RED}✗ Hysteria2 服务启动失败，正在重试...${NC}"
+        systemctl daemon-reload
+        sleep 1
         systemctl restart hysteria-server.service
-        sleep 2
+        sleep 3
         if systemctl is-active --quiet hysteria-server.service; then
             echo -e "${GREEN}✓ Hysteria2 服务已成功启动${NC}"
         else
@@ -830,10 +840,11 @@ EOF
     
     systemctl daemon-reload
     systemctl enable anytls.service nginx.service
+    sleep 1
     systemctl start anytls.service nginx.service
     
     # Check if services are running
-    sleep 2
+    sleep 3
     local anytls_ok=false
     local nginx_ok=false
     
@@ -842,8 +853,10 @@ EOF
         anytls_ok=true
     else
         echo -e "${RED}✗ AnyTLS 服务启动失败，正在重试...${NC}"
+        systemctl daemon-reload
+        sleep 1
         systemctl restart anytls.service
-        sleep 2
+        sleep 3
         if systemctl is-active --quiet anytls.service; then
             echo -e "${GREEN}✓ AnyTLS 服务已成功启动${NC}"
             anytls_ok=true
@@ -857,8 +870,10 @@ EOF
         nginx_ok=true
     else
         echo -e "${RED}✗ Nginx 服务启动失败，正在重试...${NC}"
+        systemctl daemon-reload
+        sleep 1
         systemctl restart nginx.service
-        sleep 2
+        sleep 3
         if systemctl is-active --quiet nginx.service; then
             echo -e "${GREEN}✓ Nginx 服务已成功启动${NC}"
             nginx_ok=true
@@ -1013,16 +1028,19 @@ EOF
     
     systemctl daemon-reload
     systemctl enable snell.service
+    sleep 1
     systemctl start snell.service
     
     # Check if service is running
-    sleep 2
+    sleep 3
     if systemctl is-active --quiet snell.service; then
         echo -e "${GREEN}✓ Snell 服务已成功启动${NC}"
     else
         echo -e "${RED}✗ Snell 服务启动失败，正在重试...${NC}"
+        systemctl daemon-reload
+        sleep 1
         systemctl restart snell.service
-        sleep 2
+        sleep 3
         if systemctl is-active --quiet snell.service; then
             echo -e "${GREEN}✓ Snell 服务已成功启动${NC}"
         else
