@@ -11,7 +11,7 @@ if [[ $EUID -ne 0 ]]; then
 fi
 
 # Script version (format: YYYYMMDD.N)
-SCRIPT_VERSION="20260202.1"
+SCRIPT_VERSION="20260202.2"
 
 # Color codes
 RED='\033[0;31m'
@@ -293,11 +293,11 @@ install_ssrust() {
     esac
     
     # Generate appropriate password/key
+    local sspass=""
     if [ "$use_base64_key" = true ]; then
         # Generate hex key for 2022-blake3 methods (more reliable than base64 in JSON)
         # 2022-blake3-aes-128-gcm: 16 bytes = 32 hex chars
         # 2022-blake3-aes-256-gcm: 32 bytes = 64 hex chars
-        local hex_len=$((key_bytes * 2))
         sspass=$(openssl rand -hex $key_bytes)
     else
         # Standard methods use regular password
@@ -305,9 +305,6 @@ install_ssrust() {
     fi
     
     echo -e "${GREEN}使用加密方式: ${smethod}${NC}"
-    
-    # Generate password based on encryption method requirements
-    local sspass=$(gen_random $sspass_len)
     
     # Get latest version from GitHub releases redirect (no API)
     echo -e "${BLUE}获取 Shadowsocks-rust 最新版本...${NC}"
