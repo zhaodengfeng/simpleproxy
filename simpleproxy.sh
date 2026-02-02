@@ -170,11 +170,8 @@ install_ssrust() {
     local sspass=$(gen_random 16)
     local smethod="aes-256-gcm"
     
-    # Download and install
-    local latest_version=$(curl -s https://api.github.com/repos/shadowsocks/shadowsocks-rust/releases/latest | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
-    if [ -z "$latest_version" ]; then
-        latest_version="v1.20.4"
-    fi
+    # Download and install (fixed version, no API call)
+    local ssrust_version="v1.24.0"
     
     local arch=$(uname -m)
     local download_arch="x86_64-unknown-linux-gnu"
@@ -190,7 +187,7 @@ install_ssrust() {
             ;;
     esac
     
-    local download_url="https://github.com/shadowsocks/shadowsocks-rust/releases/download/${latest_version}/shadowsocks-${latest_version}.${download_arch}.tar.xz"
+    local download_url="https://github.com/shadowsocks/shadowsocks-rust/releases/download/${ssrust_version}/shadowsocks-${ssrust_version}.${download_arch}.tar.xz"
     
     cd /tmp
     wget -q --show-progress "$download_url" -O ss-rust.tar.xz
@@ -781,27 +778,32 @@ install_anytls() {
     # Apply SSL certificate
     apply_ssl "$DOMAIN" || return 1
     
-    # Download AnyTLS
-    local latest_version=$(curl -s https://api.github.com/repos/anytls/sink/releases/latest | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
-    if [ -z "$latest_version" ]; then
-        latest_version="v0.11.0"
-    fi
-    
+    # Download AnyTLS (fixed version, no API call)
+    local anytls_version="v0.11.0"
     local arch=$(uname -m)
     local download_arch="x86_64-unknown-linux-musl"
     case $arch in
-        x86_64)
-            download_arch="x86_64-unknown-linux-musl"
-            ;;
         aarch64|arm64)
             download_arch="aarch64-unknown-linux-musl"
             ;;
     esac
     
-    local download_url="https://github.com/anytls/sink/releases/download/${latest_version}/sink-${latest_version}-${download_arch}.tar.gz"
+    local download_url="https://github.com/anytls/sink/releases/download/${anytls_version}/sink-${anytls_version}-${download_arch}.tar.gz"
     
     cd /tmp
-    wget -q --show-progress "$download_url" -O anytls.tar.gz
+    echo -e "${BLUE}下载 AnyTLS ${anytls_version}...${NC}"
+    if ! wget -q --show-progress "$download_url" -O anytls.tar.gz; then
+        echo -e "${RED}下载失败，请检查网络或手动下载${NC}"
+        return 1
+    fi
+    
+    # Verify download
+    if [ ! -f "anytls.tar.gz" ] || [ $(stat -c%s anytls.tar.gz 2>/dev/null || echo 0) -lt 1000 ]; then
+        echo -e "${RED}下载文件无效，可能是 GitHub 限制${NC}"
+        rm -f anytls.tar.gz
+        return 1
+    fi
+    
     tar -xzf anytls.tar.gz
     mv sink /usr/local/bin/anytls
     chmod +x /usr/local/bin/anytls
@@ -965,7 +967,8 @@ upgrade_anytls() {
     echo -e "${BLUE}Upgrading AnyTLS...${NC}"
     systemctl stop anytls.service
     
-    local latest_version=$(curl -s https://api.github.com/repos/anytls/sink/releases/latest | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
+    # Fixed version, no API call
+    local anytls_version="v0.11.0"
     local arch=$(uname -m)
     local download_arch="x86_64-unknown-linux-musl"
     case $arch in
@@ -975,7 +978,7 @@ upgrade_anytls() {
     esac
     
     cd /tmp
-    wget -q "https://github.com/anytls/sink/releases/download/${latest_version}/sink-${latest_version}-${download_arch}.tar.gz" -O anytls.tar.gz
+    wget -q "https://github.com/anytls/sink/releases/download/${anytls_version}/sink-${anytls_version}-${download_arch}.tar.gz" -O anytls.tar.gz
     tar -xzf anytls.tar.gz
     mv sink /usr/local/bin/anytls
     chmod +x /usr/local/bin/anytls
@@ -1043,18 +1046,35 @@ install_snell() {
             ;;
     esac
     
-    # Try to get latest version
-    local latest_version="v4.1.1"
+    # Fixed version, no API call (avoid GitHub rate limit)
+    local snell_version="v4.1.1"
     
     cd /tmp
-    wget -q --show-progress "https://github.com/surge-networks/snell/releases/download/${latest_version}/snell-server-${latest_version}-linux-${download_arch}.zip" -O snell.zip
+    echo -e "${BLUE}下载 Snell ${snell_version}...${NC}"
+    local download_url="https://github.com/surge-networks/snell/releases/download/${snell_version}/snell-server-${snell_version}-linux-${download_arch}.zip"
     
-    if [ ! -f "snell.zip" ]; then
-        echo -e "${RED}下载失败，尝试备用链接...${NC}"
-        wget -q --show-progress "https://github.com/surge-networks/snell/releases/download/v4.0.1/snell-server-v4.0.1-linux-${download_arch}.zip" -O snell.zip
+    if ! wget -q --show-progress "$download_url" -O snell.zip 2>/dev/null; then
+        echo -e "${YELLOW}主链接失败，尝试备用链接...${NC}"
+        download_url="https://github.com/surge-networks/snell/releases/download/v4.0.1/snell-server-v4.0.1-linux-${download_arch}.zip"
+        if ! wget -q --show-progress "$download_url" -O snell.zip 2>/dev/null; then
+            echo -e "${RED}下载失败，请检查网络或手动下载安装包${NC}"
+            return 1
+        fi
     fi
     
-    unzip -o snell.zip
+    # Verify download
+    if [ ! -f "snell.zip" ] || [ $(stat -c%s snell.zip 2>/dev/null || echo 0) -lt 1000 ]; then
+        echo -e "${RED}下载文件无效或太小，可能是 GitHub 限制${NC}"
+        rm -f snell.zip
+        return 1
+    fi
+    
+    if ! unzip -o snell.zip 2>/dev/null; then
+        echo -e "${RED}解压失败，文件可能已损坏${NC}"
+        rm -f snell.zip
+        return 1
+    fi
+    
     mv snell-server /usr/local/bin/
     chmod +x /usr/local/bin/snell-server
     rm -f snell.zip
@@ -1137,13 +1157,11 @@ upgrade_snell() {
             ;;
     esac
     
-    local latest_version=$(curl -s https://api.github.com/repos/surge-networks/snell/releases/latest | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
-    if [ -z "$latest_version" ]; then
-        latest_version="v4.1.1"
-    fi
+    # Fixed version, no API call (avoid GitHub rate limit)
+    local snell_version="v4.1.1"
     
     cd /tmp
-    wget -q "https://github.com/surge-networks/snell/releases/download/${latest_version}/snell-server-${latest_version}-linux-${download_arch}.zip" -O snell.zip
+    wget -q "https://github.com/surge-networks/snell/releases/download/${snell_version}/snell-server-${snell_version}-linux-${download_arch}.zip" -O snell.zip
     unzip -o snell.zip
     mv snell-server /usr/local/bin/
     chmod +x /usr/local/bin/snell-server
