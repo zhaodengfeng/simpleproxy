@@ -208,7 +208,7 @@ install_ssrust() {
     
     # Get latest version from GitHub releases redirect (no API)
     echo -e "${BLUE}获取 Shadowsocks-rust 最新版本...${NC}"
-    local ssrust_version=$(curl -sI "https://github.com/shadowsocks/shadowsocks-rust/releases/latest" | grep -i location | sed -E 's/.*tag\/(v[0-9.]+).*/\1/')
+    local ssrust_version=$(curl -sIL "https://github.com/shadowsocks/shadowsocks-rust/releases/latest" | grep -i location | sed -E 's/.*tag\/(v[0-9.]+).*/\1/')
     if [ -z "$ssrust_version" ]; then
         ssrust_version="v1.24.0"
         echo -e "${YELLOW}获取版本失败，使用默认版本 ${ssrust_version}${NC}"
