@@ -11,7 +11,7 @@ if [[ $EUID -ne 0 ]]; then
 fi
 
 # Script version (format: YYYYMMDD.N)
-SCRIPT_VERSION="260202"
+SCRIPT_VERSION="260202a"
 
 # Color codes
 RED='\033[0;31m'
@@ -275,19 +275,41 @@ install_ssrust() {
     read -t 15 -p "请输入数字(回车或等待15秒使用默认): " ss_method_choice
     
     local smethod="aes-256-gcm"
+    local sspass=""
     case "$ss_method_choice" in
-        1|"") smethod="aes-256-gcm" ;;
-        2) smethod="aes-128-gcm" ;;
-        3) smethod="chacha20-ietf-poly1305" ;;
-        4) smethod="2022-blake3-aes-128-gcm" ;;
-        5) smethod="2022-blake3-aes-256-gcm" ;;
-        6) smethod="2022-blake3-chacha20-poly1305" ;;
-        *) echo -e "${YELLOW}无效选项，使用默认 aes-256-gcm${NC}"; smethod="aes-256-gcm" ;;
+        1|"") 
+            smethod="aes-256-gcm"
+            sspass=$(gen_random 16)
+            ;;
+        2) 
+            smethod="aes-128-gcm"
+            sspass=$(gen_random 16)
+            ;;
+        3) 
+            smethod="chacha20-ietf-poly1305"
+            sspass=$(gen_random 16)
+            ;;
+        4) 
+            smethod="2022-blake3-aes-128-gcm"
+            # 16 bytes = 24 base64 chars
+            sspass=$(dd if=/dev/urandom bs=16 count=1 2>/dev/null | base64 -w 0)
+            ;;
+        5) 
+            smethod="2022-blake3-aes-256-gcm"
+            # 32 bytes = 44 base64 chars
+            sspass=$(dd if=/dev/urandom bs=32 count=1 2>/dev/null | base64 -w 0)
+            ;;
+        6) 
+            smethod="2022-blake3-chacha20-poly1305"
+            # 32 bytes = 44 base64 chars
+            sspass=$(dd if=/dev/urandom bs=32 count=1 2>/dev/null | base64 -w 0)
+            ;;
+        *) 
+            echo -e "${YELLOW}无效选项，使用默认 aes-256-gcm${NC}"
+            smethod="aes-256-gcm"
+            sspass=$(gen_random 16)
+            ;;
     esac
-    
-    # Generate password - standard methods work with any password
-    # Note: 2022-blake3 methods require base64-encoded keys, handled separately
-    local sspass=$(gen_random 24)
     
     echo -e "${GREEN}使用加密方式: ${smethod}${NC}"
     
@@ -1507,37 +1529,50 @@ show_configs() {
     echo ""
     echo -e "${YELLOW}=========== 客户端配置信息 ===========${NC}"
     
+    local has_config=false
+    
     if [ -f /etc/shadowsocks/client.json ]; then
         echo ""
         echo -e "${BLUE}--- Shadowsocks-rust ---${NC}"
         cat /etc/shadowsocks/client.json
+        has_config=true
     fi
     
     if [ -f /usr/local/etc/xray/reclient.json ]; then
         echo ""
         echo -e "${BLUE}--- Reality ---${NC}"
         cat /usr/local/etc/xray/reclient.json
+        has_config=true
     fi
     
     if [ -f /etc/hysteria/hyclient.json ]; then
         echo ""
         echo -e "${BLUE}--- Hysteria2 ---${NC}"
         cat /etc/hysteria/hyclient.json
+        has_config=true
     fi
     
     if [ -f /usr/local/etc/xray/v2client.json ]; then
         echo ""
         echo -e "${BLUE}--- V2Ray+TLS+WS ---${NC}"
         cat /usr/local/etc/xray/v2client.json
+        has_config=true
     fi
     
     if [ -f /etc/snell/client.json ]; then
         echo ""
         echo -e "${BLUE}--- Snell ---${NC}"
         cat /etc/snell/client.json
+        has_config=true
+    fi
+    
+    if [ "$has_config" = false ]; then
+        echo ""
+        echo -e "${YELLOW}未找到任何代理配置${NC}"
     fi
     
     echo ""
+    read -p "按回车键继续..."
 }
 
 # ==================== Menu Functions ====================
