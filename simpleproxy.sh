@@ -1060,9 +1060,16 @@ install_snell() {
             ;;
     esac
     
-    # Snell official download source (not GitHub)
-    local snell_version="v5.0.1"
-    echo -e "${BLUE}使用 Snell 官方版本 ${snell_version}${NC}"
+    # Get latest Snell version from official release notes
+    echo -e "${BLUE}获取 Snell 最新版本...${NC}"
+    local snell_version=$(curl -s "https://kb.nssurge.com/surge-knowledge-base/zh/release-notes/snell" 2>/dev/null | grep -oE "snell-server-v[0-9]+\.[0-9]+\.[0-9]+" | head -1 | sed 's/snell-server-v//')
+    if [ -z "$snell_version" ]; then
+        snell_version="v5.0.1"
+        echo -e "${YELLOW}获取版本失败，使用默认版本 ${snell_version}${NC}"
+    else
+        snell_version="v${snell_version}"
+        echo -e "${GREEN}最新版本: ${snell_version}${NC}"
+    fi
     
     cd /tmp
     echo -e "${BLUE}下载 Snell ${snell_version}...${NC}"
@@ -1177,8 +1184,12 @@ upgrade_snell() {
     # Fixed version, no API call (avoid GitHub rate limit)
     local snell_version="v4.1.1"
     
-    # Fixed version for upgrade (official source)
-    local snell_version="v5.0.1"
+    # Get latest version for upgrade (official source)
+    local snell_version=$(curl -s "https://kb.nssurge.com/surge-knowledge-base/zh/release-notes/snell" 2>/dev/null | grep -oE "snell-server-v[0-9]+\.[0-9]+\.[0-9]+" | head -1 | sed 's/snell-server-v//')
+    if [ -z "$snell_version" ]; then
+        snell_version="5.0.1"
+    fi
+    snell_version="v${snell_version}"
     
     cd /tmp
     # Official Snell download source
