@@ -1,6 +1,7 @@
 #!/bin/bash
-# Proxy Install Script - Modified from yeahwu/v2ray-wss
+# SIMPLEPROXY - A Multi-Protocol Proxy Installer
 # Supports: Shadowsocks-rust, Reality, Hysteria2, V2Ray+TLS+WS, Snell
+# Version: 2.0.0
 # forum: https://1024.day
 
 if [[ $EUID -ne 0 ]]; then
@@ -8,6 +9,9 @@ if [[ $EUID -ne 0 ]]; then
     echo "Error: This script must be run as root!" 1>&2
     exit 1
 fi
+
+# Script version
+SCRIPT_VERSION="2.0.0"
 
 # Color codes
 RED='\033[0;31m'
@@ -259,8 +263,33 @@ install_ssrust() {
         return 1
     fi
     
-    local sspass=$(gen_random 16)
+    # Encryption method selection
+    echo ""
+    echo -e "${YELLOW}请选择加密方式:${NC}"
+    echo " 1. aes-256-gcm (默认)"
+    echo " 2. aes-128-gcm"
+    echo " 3. chacha20-ietf-poly1305"
+    echo " 4. 2022-blake3-aes-128-gcm"
+    echo " 5. 2022-blake3-aes-256-gcm"
+    echo " 6. 2022-blake3-chacha20-poly1305"
+    read -t 15 -p "请输入数字(回车或等待15秒使用默认): " ss_method_choice
+    
     local smethod="aes-256-gcm"
+    local sspass_len=16
+    case "$ss_method_choice" in
+        1|"") smethod="aes-256-gcm"; sspass_len=16 ;;
+        2) smethod="aes-128-gcm"; sspass_len=16 ;;
+        3) smethod="chacha20-ietf-poly1305"; sspass_len=16 ;;
+        4) smethod="2022-blake3-aes-128-gcm"; sspass_len=32 ;;
+        5) smethod="2022-blake3-aes-256-gcm"; sspass_len=44 ;;
+        6) smethod="2022-blake3-chacha20-poly1305"; sspass_len=44 ;;
+        *) echo -e "${YELLOW}无效选项，使用默认 aes-256-gcm${NC}"; smethod="aes-256-gcm"; sspass_len=16 ;;
+    esac
+    
+    echo -e "${GREEN}使用加密方式: ${smethod}${NC}"
+    
+    # Generate password based on encryption method requirements
+    local sspass=$(gen_random $sspass_len)
     
     # Get latest version from GitHub releases redirect (no API)
     echo -e "${BLUE}获取 Shadowsocks-rust 最新版本...${NC}"
@@ -1588,7 +1617,10 @@ show_menu() {
     clear
     check_installed
     
-    echo -e "${YELLOW}=========== 代理管理脚本 ===========${NC}"
+    echo -e "${YELLOW}╔══════════════════════════════════════╗${NC}"
+    echo -e "${YELLOW}║         SIMPLEPROXY v${SCRIPT_VERSION}        ║${NC}"
+    echo -e "${YELLOW}╚══════════════════════════════════════╝${NC}"
+    echo ""
     echo " 1. 安装代理"
     echo " 2. 升级代理"
     echo " 3. 卸载代理"
