@@ -10,8 +10,8 @@ if [[ $EUID -ne 0 ]]; then
     exit 1
 fi
 
-# Script version
-SCRIPT_VERSION="2.0.0"
+# Script version (format: YYYYMMDD.N)
+SCRIPT_VERSION="20260202.1"
 
 # Color codes
 RED='\033[0;31m'
@@ -266,24 +266,24 @@ install_ssrust() {
     # Encryption method selection
     echo ""
     echo -e "${YELLOW}请选择加密方式:${NC}"
-    echo " 1. aes-256-gcm (默认)"
+    echo " 1. aes-256-gcm"
     echo " 2. aes-128-gcm"
     echo " 3. chacha20-ietf-poly1305"
-    echo " 4. 2022-blake3-aes-128-gcm"
+    echo " 4. 2022-blake3-aes-128-gcm (默认)"
     echo " 5. 2022-blake3-aes-256-gcm"
     echo " 6. 2022-blake3-chacha20-poly1305"
     read -t 15 -p "请输入数字(回车或等待15秒使用默认): " ss_method_choice
     
-    local smethod="aes-256-gcm"
-    local sspass_len=16
+    local smethod="2022-blake3-aes-128-gcm"
+    local sspass_len=32
     case "$ss_method_choice" in
-        1|"") smethod="aes-256-gcm"; sspass_len=16 ;;
+        1) smethod="aes-256-gcm"; sspass_len=16 ;;
         2) smethod="aes-128-gcm"; sspass_len=16 ;;
         3) smethod="chacha20-ietf-poly1305"; sspass_len=16 ;;
-        4) smethod="2022-blake3-aes-128-gcm"; sspass_len=32 ;;
+        4|"") smethod="2022-blake3-aes-128-gcm"; sspass_len=32 ;;
         5) smethod="2022-blake3-aes-256-gcm"; sspass_len=44 ;;
         6) smethod="2022-blake3-chacha20-poly1305"; sspass_len=44 ;;
-        *) echo -e "${YELLOW}无效选项，使用默认 aes-256-gcm${NC}"; smethod="aes-256-gcm"; sspass_len=16 ;;
+        *) echo -e "${YELLOW}无效选项，使用默认 2022-blake3-aes-128-gcm${NC}"; smethod="2022-blake3-aes-128-gcm"; sspass_len=32 ;;
     esac
     
     echo -e "${GREEN}使用加密方式: ${smethod}${NC}"
