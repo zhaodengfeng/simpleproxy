@@ -318,7 +318,6 @@ install_reality() {
     # Ask if user wants to use custom domain
     read -p "是否使用自己的域名? (y/n, 默认n): " use_domain
     
-    local ruuid=$(gen_uuid)
     local server_ip=$(getIP)
     local rsni="www.microsoft.com"
     local rdomain=""
@@ -348,14 +347,21 @@ install_reality() {
     
     echo -e "${GREEN}Xray 已安装，版本: $(xray version | head -1)${NC}"
     
-    # Generate keys
-    local rprivatekey=$(xray x25519 2>/dev/null | grep "Private key:" | awk '{print $3}')
-    if [ -z "$rprivatekey" ]; then
-        echo -e "${RED}错误: 无法生成 X25519 密钥${NC}"
+    # Generate keys - ensure no whitespace
+    local rprivatekey=$(xray x25519 2>/dev/null | grep "Private key:" | awk '{print $3}' | tr -d '[:space:]')
+    if [ -z "$rprivatekey" ] || [ ${#rprivatekey} -lt 40 ]; then
+        echo -e "${RED}错误: 无法生成 X25519 私钥${NC}"
         return 1
     fi
-    local rpublickey=$(echo "$rprivatekey" | xargs -I {} xray x25519 -i {} 2>/dev/null | grep "Public key:" | awk '{print $3}')
-    local rshortid=$(openssl rand -hex 4)
+    
+    local rpublickey=$(xray x25519 -i "$rprivatekey" 2>/dev/null | grep "Public key:" | awk '{print $3}' | tr -d '[:space:]')
+    if [ -z "$rpublickey" ] || [ ${#rpublickey} -lt 40 ]; then
+        echo -e "${RED}错误: 无法生成 X25519 公钥${NC}"
+        return 1
+    fi
+    
+    local rshortid=$(openssl rand -hex 4 | tr -d '[:space:]')
+    local ruuid=$(gen_uuid | tr -d '[:space:]')
     
     # If using custom domain
     if [[ "$use_domain" =~ ^[Yy]$ ]]; then
@@ -504,6 +510,14 @@ EOF
     systemctl daemon-reload
     systemctl enable xray.service
     
+    # Validate config before starting
+    echo -e "${BLUE}正在验证 Xray 配置...${NC}"
+    if xray -test -config /usr/local/etc/xray/config.json 2>&1 | grep -q "Configuration OK"; then
+        echo -e "${GREEN}✓ 配置验证通过${NC}"
+    else
+        echo -e "${YELLOW}配置可能有警告，继续尝试启动...${NC}"
+    fi
+    
     # Start service
     echo -e "${BLUE}正在启动 Xray 服务...${NC}"
     systemctl start xray.service
@@ -522,8 +536,16 @@ EOF
             echo -e "${GREEN}✓ Reality/Xray 服务已成功启动${NC}"
         else
             echo -e "${RED}✗ Reality/Xray 服务启动失败${NC}"
-            echo -e "${YELLOW}请检查日志: journalctl -u xray.service -n 20${NC}"
-            echo -e "${YELLOW}检查配置: xray -test -config /usr/local/etc/xray/config.json${NC}"
+            echo ""
+            echo -e "${YELLOW}=== 诊断信息 ===${NC}"
+            echo -e "${YELLOW}1. 检查配置有效性:${NC}"
+            xray -test -config /usr/local/etc/xray/config.json 2>&1 | head -5
+            echo ""
+            echo -e "${YELLOW}2. 查看日志:${NC}"
+            journalctl -u xray.service -n 10 --no-pager
+            echo ""
+            echo -e "${YELLOW}3. 配置文件内容:${NC}"
+            cat /usr/local/etc/xray/config.json
         fi
     fi
     
