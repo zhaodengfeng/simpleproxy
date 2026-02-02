@@ -236,6 +236,21 @@ EOF
     systemctl enable shadowsocks.service
     systemctl start shadowsocks.service
     
+    # Check if service is running
+    sleep 2
+    if systemctl is-active --quiet shadowsocks.service; then
+        echo -e "${GREEN}✓ Shadowsocks-rust 服务已成功启动${NC}"
+    else
+        echo -e "${RED}✗ Shadowsocks-rust 服务启动失败，正在重试...${NC}"
+        systemctl restart shadowsocks.service
+        sleep 2
+        if systemctl is-active --quiet shadowsocks.service; then
+            echo -e "${GREEN}✓ Shadowsocks-rust 服务已成功启动${NC}"
+        else
+            echo -e "${RED}✗ Shadowsocks-rust 服务启动失败，请手动检查: journalctl -u shadowsocks.service${NC}"
+        fi
+    fi
+    
     # Save client config
     local server_ip=$(getIP)
     cat > /etc/shadowsocks/client.json <<EOF
@@ -457,6 +472,21 @@ EOF
     systemctl restart xray.service
     systemctl enable xray.service
     
+    # Check if service is running
+    sleep 2
+    if systemctl is-active --quiet xray.service; then
+        echo -e "${GREEN}✓ Reality/Xray 服务已成功启动${NC}"
+    else
+        echo -e "${RED}✗ Reality/Xray 服务启动失败，正在重试...${NC}"
+        systemctl restart xray.service
+        sleep 2
+        if systemctl is-active --quiet xray.service; then
+            echo -e "${GREEN}✓ Reality/Xray 服务已成功启动${NC}"
+        else
+            echo -e "${RED}✗ Reality/Xray 服务启动失败，请手动检查: journalctl -u xray.service${NC}"
+        fi
+    fi
+    
     echo ""
     echo -e "${GREEN}Reality 安装完成!${NC}"
     cat /usr/local/etc/xray/reclient.json
@@ -606,6 +636,21 @@ EOF
     systemctl daemon-reload
     systemctl enable hysteria-server.service
     systemctl start hysteria-server.service
+    
+    # Check if service is running
+    sleep 2
+    if systemctl is-active --quiet hysteria-server.service; then
+        echo -e "${GREEN}✓ Hysteria2 服务已成功启动${NC}"
+    else
+        echo -e "${RED}✗ Hysteria2 服务启动失败，正在重试...${NC}"
+        systemctl restart hysteria-server.service
+        sleep 2
+        if systemctl is-active --quiet hysteria-server.service; then
+            echo -e "${GREEN}✓ Hysteria2 服务已成功启动${NC}"
+        else
+            echo -e "${RED}✗ Hysteria2 服务启动失败，请手动检查: journalctl -u hysteria-server.service${NC}"
+        fi
+    fi
     
     # Save client config
     cat > /etc/hysteria/hyclient.json <<EOF
@@ -787,6 +832,41 @@ EOF
     systemctl enable anytls.service nginx.service
     systemctl start anytls.service nginx.service
     
+    # Check if services are running
+    sleep 2
+    local anytls_ok=false
+    local nginx_ok=false
+    
+    if systemctl is-active --quiet anytls.service; then
+        echo -e "${GREEN}✓ AnyTLS 服务已成功启动${NC}"
+        anytls_ok=true
+    else
+        echo -e "${RED}✗ AnyTLS 服务启动失败，正在重试...${NC}"
+        systemctl restart anytls.service
+        sleep 2
+        if systemctl is-active --quiet anytls.service; then
+            echo -e "${GREEN}✓ AnyTLS 服务已成功启动${NC}"
+            anytls_ok=true
+        else
+            echo -e "${RED}✗ AnyTLS 服务启动失败，请手动检查: journalctl -u anytls.service${NC}"
+        fi
+    fi
+    
+    if systemctl is-active --quiet nginx.service; then
+        echo -e "${GREEN}✓ Nginx 服务已成功启动${NC}"
+        nginx_ok=true
+    else
+        echo -e "${RED}✗ Nginx 服务启动失败，正在重试...${NC}"
+        systemctl restart nginx.service
+        sleep 2
+        if systemctl is-active --quiet nginx.service; then
+            echo -e "${GREEN}✓ Nginx 服务已成功启动${NC}"
+            nginx_ok=true
+        else
+            echo -e "${RED}✗ Nginx 服务启动失败，请手动检查: nginx -t${NC}"
+        fi
+    fi
+    
     # Setup auto-renewal
     setup_cert_renewal "$DOMAIN"
     
@@ -934,6 +1014,21 @@ EOF
     systemctl daemon-reload
     systemctl enable snell.service
     systemctl start snell.service
+    
+    # Check if service is running
+    sleep 2
+    if systemctl is-active --quiet snell.service; then
+        echo -e "${GREEN}✓ Snell 服务已成功启动${NC}"
+    else
+        echo -e "${RED}✗ Snell 服务启动失败，正在重试...${NC}"
+        systemctl restart snell.service
+        sleep 2
+        if systemctl is-active --quiet snell.service; then
+            echo -e "${GREEN}✓ Snell 服务已成功启动${NC}"
+        else
+            echo -e "${RED}✗ Snell 服务启动失败，请手动检查: journalctl -u snell.service${NC}"
+        fi
+    fi
     
     # Save client config
     cat > /etc/snell/client.json <<EOF
