@@ -11,7 +11,7 @@ if [[ $EUID -ne 0 ]]; then
 fi
 
 # Script version (format: YYYYMMDD.N)
-SCRIPT_VERSION="260202a"
+SCRIPT_VERSION="260202b"
 
 # Color codes
 RED='\033[0;31m'
@@ -1485,10 +1485,10 @@ check_installed() {
         echo -e "${RED}✗ Shadowsocks-rust: 未安装${NC}"
     fi
     
-    # Reality
-    if systemctl is-active --quiet xray.service 2>/dev/null; then
+    # Reality - check for reclient.json specifically
+    if systemctl is-active --quiet xray.service 2>/dev/null && [ -f /usr/local/etc/xray/reclient.json ]; then
         echo -e "${GREEN}✓ Reality (Xray): 运行中${NC}"
-    elif [ -f /usr/local/etc/xray/config.json ]; then
+    elif [ -f /usr/local/etc/xray/reclient.json ]; then
         echo -e "${YELLOW}○ Reality (Xray): 已安装但未运行${NC}"
     else
         echo -e "${RED}✗ Reality (Xray): 未安装${NC}"
@@ -1503,10 +1503,10 @@ check_installed() {
         echo -e "${RED}✗ Hysteria2: 未安装${NC}"
     fi
     
-    # V2Ray+WS
+    # V2Ray+WS - check for v2client.json specifically
     if systemctl is-active --quiet xray.service 2>/dev/null && [ -f /usr/local/etc/xray/v2client.json ]; then
         echo -e "${GREEN}✓ V2Ray+TLS+WS: 运行中${NC}"
-    elif [ -f /usr/local/etc/xray/v2client.json ]; then
+ elif [ -f /usr/local/etc/xray/v2client.json ]; then
         echo -e "${YELLOW}○ V2Ray+TLS+WS: 已安装但未运行${NC}"
     else
         echo -e "${RED}✗ V2Ray+TLS+WS: 未安装${NC}"
