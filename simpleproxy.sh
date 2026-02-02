@@ -1178,6 +1178,17 @@ install_snell() {
         return 1
     fi
     
+    # Ask for custom DNS servers
+    echo ""
+    read -t 15 -p "请输入 DNS 服务器(回车或等待15秒使用默认 8.8.8.8,1.1.1.1): " sndns_input
+    if [ -n "$sndns_input" ]; then
+        local sndns="$sndns_input"
+        echo -e "${GREEN}使用自定义 DNS: ${sndns}${NC}"
+    else
+        local sndns="8.8.8.8, 1.1.1.1"
+        echo -e "${GREEN}使用默认 DNS: ${sndns}${NC}"
+    fi
+    
     local snpsk=$(gen_random 32)
     local server_ip=$(getIP)
     
@@ -1250,7 +1261,7 @@ install_snell() {
 listen = 0.0.0.0:${snport}
 psk = ${snpsk}
 ipv6 = false
-dns = 8.8.8.8, 1.1.1.1
+dns = ${sndns}
 EOF
     
     # Create systemd service
@@ -1298,7 +1309,7 @@ EOF
 端口: ${snport}
 PSK: ${snpsk}
 版本: 5
-DNS: 8.8.8.8, 1.1.1.1
+DNS: ${sndns}
 
 snell://${snpsk}@${server_ip}:${snport}?version=5#Snell
 EOF
