@@ -11,7 +11,7 @@ if [[ $EUID -ne 0 ]]; then
 fi
 
 # Script version (format: YYYYMMDD.N)
-SCRIPT_VERSION="20260202.2"
+SCRIPT_VERSION="260202"
 
 # Color codes
 RED='\033[0;31m'
@@ -266,43 +266,28 @@ install_ssrust() {
     # Encryption method selection
     echo ""
     echo -e "${YELLOW}请选择加密方式:${NC}"
-    echo " 1. aes-256-gcm"
+    echo " 1. aes-256-gcm (默认)"
     echo " 2. aes-128-gcm"
     echo " 3. chacha20-ietf-poly1305"
-    echo " 4. 2022-blake3-aes-128-gcm (默认)"
+    echo " 4. 2022-blake3-aes-128-gcm"
     echo " 5. 2022-blake3-aes-256-gcm"
     echo " 6. 2022-blake3-chacha20-poly1305"
     read -t 15 -p "请输入数字(回车或等待15秒使用默认): " ss_method_choice
     
-    # Key length requirements for different methods:
-    # Standard methods: any password works
-    # 2022-blake3-aes-128-gcm: needs 16 bytes key (base64 = 24 chars with padding)
-    # 2022-blake3-aes-256-gcm: needs 32 bytes key (base64 = 44 chars with padding)  
-    # 2022-blake3-chacha20-poly1305: needs 32 bytes key (base64 = 44 chars with padding)
-    local smethod="2022-blake3-aes-128-gcm"
-    local use_base64_key=false
-    local key_bytes=16
+    local smethod="aes-256-gcm"
     case "$ss_method_choice" in
-        1) smethod="aes-256-gcm"; use_base64_key=false ;;
-        2) smethod="aes-128-gcm"; use_base64_key=false ;;
-        3) smethod="chacha20-ietf-poly1305"; use_base64_key=false ;;
-        4|"") smethod="2022-blake3-aes-128-gcm"; use_base64_key=true; key_bytes=16 ;;
-        5) smethod="2022-blake3-aes-256-gcm"; use_base64_key=true; key_bytes=32 ;;
-        6) smethod="2022-blake3-chacha20-poly1305"; use_base64_key=true; key_bytes=32 ;;
-        *) echo -e "${YELLOW}无效选项，使用默认 2022-blake3-aes-128-gcm${NC}"; smethod="2022-blake3-aes-128-gcm"; use_base64_key=true; key_bytes=16 ;;
+        1|"") smethod="aes-256-gcm" ;;
+        2) smethod="aes-128-gcm" ;;
+        3) smethod="chacha20-ietf-poly1305" ;;
+        4) smethod="2022-blake3-aes-128-gcm" ;;
+        5) smethod="2022-blake3-aes-256-gcm" ;;
+        6) smethod="2022-blake3-chacha20-poly1305" ;;
+        *) echo -e "${YELLOW}无效选项，使用默认 aes-256-gcm${NC}"; smethod="aes-256-gcm" ;;
     esac
     
-    # Generate appropriate password/key
-    local sspass=""
-    if [ "$use_base64_key" = true ]; then
-        # Generate hex key for 2022-blake3 methods (more reliable than base64 in JSON)
-        # 2022-blake3-aes-128-gcm: 16 bytes = 32 hex chars
-        # 2022-blake3-aes-256-gcm: 32 bytes = 64 hex chars
-        sspass=$(openssl rand -hex $key_bytes)
-    else
-        # Standard methods use regular password
-        sspass=$(gen_random 16)
-    fi
+    # Generate password - standard methods work with any password
+    # Note: 2022-blake3 methods require base64-encoded keys, handled separately
+    local sspass=$(gen_random 24)
     
     echo -e "${GREEN}使用加密方式: ${smethod}${NC}"
     
