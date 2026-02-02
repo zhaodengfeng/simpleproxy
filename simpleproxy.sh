@@ -889,15 +889,10 @@ install_anytls() {
     # Apply SSL certificate
     apply_ssl "$DOMAIN" || return 1
     
-    # Get latest version from GitHub releases redirect (no API)
-    echo -e "${BLUE}获取 AnyTLS 最新版本...${NC}"
-    local anytls_version=$(curl -sI "https://github.com/anytls/sink/releases/latest" | grep -i location | sed -E 's/.*tag\/(v[0-9.]+).*/\1/')
-    if [ -z "$anytls_version" ]; then
-        anytls_version="v0.11.0"
-        echo -e "${YELLOW}获取版本失败，使用默认版本 ${anytls_version}${NC}"
-    else
-        echo -e "${GREEN}最新版本: ${anytls_version}${NC}"
-    fi
+    # Use fixed version to avoid GitHub access issues
+    local anytls_version="v0.11.0"
+    echo -e "${BLUE}AnyTLS 版本: ${anytls_version}${NC}"
+    
     local arch=$(uname -m)
     local download_arch="x86_64-unknown-linux-musl"
     case $arch in
@@ -906,78 +901,64 @@ install_anytls() {
             ;;
     esac
     
-    local download_url="https://github.com/anytls/sink/releases/download/${anytls_version}/sink-${anytls_version}-${download_arch}.tar.gz"
+    # Multiple download sources
+    local download_sources=(
+        "https://github.com/anytls/sink/releases/download/${anytls_version}/sink-${anytls_version}-${download_arch}.tar.gz"
+        "https://ghproxy.com/https://github.com/anytls/sink/releases/download/${anytls_version}/sink-${anytls_version}-${download_arch}.tar.gz"
+        "https://github.moeyy.xyz/https://github.com/anytls/sink/releases/download/${anytls_version}/sink-${anytls_version}-${download_arch}.tar.gz"
+        "https://gh-proxy.com/https://github.com/anytls/sink/releases/download/${anytls_version}/sink-${anytls_version}-${download_arch}.tar.gz"
+    )
     
     cd /tmp
     echo -e "${BLUE}下载 AnyTLS ${anytls_version}...${NC}"
     
-    # Try multiple download methods
+    # Try multiple download sources
     local download_success=false
+    local used_source=""
     
-    # Method 1: wget with timeout
-    if ! $download_success; then
-        echo -e "${BLUE}尝试使用 wget 下载...${NC}"
-        if wget -q --timeout=30 --tries=2 --show-progress "$download_url" -O anytls.tar.gz 2>/dev/null; then
-            download_success=true
+    for source in "${download_sources[@]}"; do
+        if $download_success; then
+            break
         fi
-    fi
-    
-    # Method 2: curl
-    if ! $download_success; then
-        echo -e "${BLUE}尝试使用 curl 下载...${NC}"
-        if curl -fsSL --max-time 60 --retry 2 "$download_url" -o anytls.tar.gz 2>/dev/null; then
+        echo -e "${BLUE}尝试下载源: $(echo "$source" | cut -d'/' -f3)${NC}"
+        
+        # Try wget
+        if wget -q --timeout=30 --tries=2 "$source" -O anytls.tar.gz 2>/dev/null; then
             download_success=true
+            used_source="$source"
+            break
         fi
-    fi
+        
+        # Try curl
+        if curl -fsSL --max-time 60 --retry 2 "$source" -o anytls.tar.gz 2>/dev/null; then
+            download_success=true
+            used_source="$source"
+            break
+        fi
+    done
     
-    # Method 3: Multiple GitHub proxies
-    if ! $download_success; then
-        echo -e "${BLUE}尝试使用 GitHub 代理...${NC}"
-        local proxy_list=(
-            "https://ghproxy.com/"
-            "https://gh-proxy.com/"
-            "https://gh.api.99988866.xyz/"
-            "https://gitproxy.click/"
-            "https://github.moeyy.xyz/"
-        )
-        for proxy in "${proxy_list[@]}"; do
-            echo -e "${BLUE}尝试代理: ${proxy}${NC}"
-            if wget -q --timeout=30 --tries=2 "${proxy}${download_url}" -O anytls.tar.gz 2>/dev/null; then
-                download_success=true
-                break
-            elif curl -fsSL --max-time 60 --retry 2 "${proxy}${download_url}" -o anytls.tar.gz 2>/dev/null; then
-                download_success=true
-                break
-            fi
-        done
-    fi
-    
-    # Method 4: Check if file already exists (manual download)
+    # Check if file already exists (manual download)
     if ! $download_success && [ -f "/tmp/anytls.tar.gz" ]; then
         echo -e "${YELLOW}检测到已有下载文件 /tmp/anytls.tar.gz${NC}"
         local file_size=$(stat -c%s /tmp/anytls.tar.gz 2>/dev/null || echo 0)
         if [ "$file_size" -gt 1000000 ]; then
             echo -e "${GREEN}✓ 使用已有文件 (${file_size} 字节)${NC}"
-            cp /tmp/anytls.tar.gz /tmp/anytls.tar.gz.bak
             download_success=true
         fi
     fi
     
     if ! $download_success; then
-        echo -e "${RED}✗ 所有下载方式都失败了${NC}"
+        echo -e "${RED}✗ 所有下载源都失败了${NC}"
         echo ""
         echo -e "${YELLOW}=== 手动下载指南 ===${NC}"
-        echo -e "1. 在浏览器或另一台服务器下载："
-        echo -e "   ${download_url}"
+        echo -e "1. 在另一台能访问 GitHub 的服务器上下载："
+        for source in "${download_sources[@]}"; do
+            echo -e "   wget '$source' -O anytls.tar.gz"
+        done
         echo -e ""
-        echo -e "2. 上传到当前服务器的 /tmp/ 目录，重命名为 anytls.tar.gz"
+        echo -e "2. 上传到当前服务器的 /tmp/ 目录"
         echo -e ""
         echo -e "3. 重新运行脚本安装 AnyTLS"
-        echo -e ""
-        echo -e "${YELLOW}或者尝试以下代理链接手动下载：${NC}"
-        for proxy in "${proxy_list[@]}"; do
-            echo -e "   ${proxy}${download_url}"
-        done
         return 1
     fi
     
