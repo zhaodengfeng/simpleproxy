@@ -159,6 +159,20 @@ apply_ssl() {
         --key-file /etc/letsencrypt/live/$domain/privkey.pem \
         --reloadcmd "systemctl restart nginx 2>/dev/null || true"
     
+    # Fix certificate permissions for Xray and other services
+    echo -e "${BLUE}设置证书权限...${NC}"
+    chmod 755 /etc/letsencrypt/live
+    chmod 755 /etc/letsencrypt/archive 2>/dev/null || true
+    chmod 644 /etc/letsencrypt/live/$domain/fullchain.pem
+    chmod 644 /etc/letsencrypt/live/$domain/privkey.pem
+    
+    # Create a copy in Xray directory with proper permissions (more secure)
+    mkdir -p /usr/local/etc/xray/certs
+    cp /etc/letsencrypt/live/$domain/fullchain.pem /usr/local/etc/xray/certs/${domain}.crt
+    cp /etc/letsencrypt/live/$domain/privkey.pem /usr/local/etc/xray/certs/${domain}.key
+    chmod 644 /usr/local/etc/xray/certs/${domain}.crt
+    chmod 644 /usr/local/etc/xray/certs/${domain}.key
+    
     echo -e "${GREEN}SSL证书安装成功!${NC}"
     return 0
 }
@@ -469,8 +483,8 @@ install_reality() {
         "tlsSettings": {
           "certificates": [
             {
-              "certificateFile": "/etc/letsencrypt/live/${rdomain}/fullchain.pem",
-              "keyFile": "/etc/letsencrypt/live/${rdomain}/privkey.pem"
+              "certificateFile": "/usr/local/etc/xray/certs/${rdomain}.crt",
+              "keyFile": "/usr/local/etc/xray/certs/${rdomain}.key"
             }
           ]
         }
@@ -633,8 +647,6 @@ EOF
         
         echo -e "${RED}安装失败，请检查以上诊断信息${NC}"
         return 1
-    fi
-    
     fi
     
     # Final verification
@@ -1316,6 +1328,26 @@ uninstall_snell() {
 # Setup certificate auto-renewal
 setup_cert_renewal() {
     local domain=$1
+    
+    # Create renewal hook script to update Xray certificates
+    cat > /etc/letsencrypt/renewal-hooks/deploy/xray-certs.sh <<EOF
+#!/bin/bash
+# Auto-update Xray certificates after renewal
+for domain in \$(find /etc/letsencrypt/live -mindepth 1 -maxdepth 1 -type d | xargs -n1 basename); do
+    if [ -f "/etc/letsencrypt/live/\$domain/fullchain.pem" ]; then
+        cp /etc/letsencrypt/live/\$domain/fullchain.pem /usr/local/etc/xray/certs/\${domain}.crt
+        cp /etc/letsencrypt/live/\$domain/privkey.pem /usr/local/etc/xray/certs/\${domain}.key
+        chmod 644 /usr/local/etc/xray/certs/\${domain}.crt
+        chmod 644 /usr/local/etc/xray/certs/\${domain}.key
+    fi
+done
+systemctl restart xray.service 2>/dev/null || true
+EOF
+    chmod +x /etc/letsencrypt/renewal-hooks/deploy/xray-certs.sh 2>/dev/null || true
+    
+    # Also add to acme.sh reloadcmd for immediate updates
+    ~/.acme.sh/acme.sh --installcert -d $domain --ecc \
+        --reloadcmd "cp /etc/letsencrypt/live/$domain/fullchain.pem /usr/local/etc/xray/certs/${domain}.crt && cp /etc/letsencrypt/live/$domain/privkey.pem /usr/local/etc/xray/certs/${domain}.key && chmod 644 /usr/local/etc/xray/certs/${domain}.* && systemctl restart xray.service 2>/dev/null || true"
     
     # Add cron job for certificate renewal
     (crontab -l 2>/dev/null | grep -v "acme.sh --cron"; echo "0 3 * * * $HOME/.acme.sh/acme.sh --cron --home \"$HOME/.acme.sh\" > /dev/null 2>&1") | crontab -
