@@ -340,15 +340,6 @@ wget https://raw.githubusercontent.com/zhaodengfeng/simpleproxy/main/simpleproxy
 chmod +x simpleproxy.sh
 ```
 
-## 版本历史
-
-| 版本 | 日期 | 更新内容 |
-|------|------|---------|
-| 260202d | 2025-02-02 | 新增 Hysteria2 端口跳跃(Port Hopping)支持 |
-| 260202c | 2025-02-02 | 修复 Reality/V2Ray+WS 状态检测冲突，优化 Shadowsocks 启动逻辑 |
-| 260202b | 2025-02-02 | 修复 Shadowsocks 2022-blake3 密钥生成 |
-| 260202 | 2025-02-02 | 初始版本，支持 5 种代理协议 |
-
 ## License
 
 MIT
