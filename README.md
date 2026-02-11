@@ -6,10 +6,18 @@ It is designed for users who want a single interactive script to install service
 
 ## Features
 
-- Multi-protocol support (including mainstream modern protocols)
+- Install and manage multiple proxy services in one script
 - Interactive terminal menu for install/manage/uninstall
 - Basic service status checks and config helpers
 - Suitable for fresh Linux VPS setup
+
+## Supported Proxy Services
+
+- Shadowsocks-rust
+- VLESS + Reality
+- Hysteria 2
+- V2Ray + TLS + WebSocket
+- Snell
 
 ## Requirements
 
