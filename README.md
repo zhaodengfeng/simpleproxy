@@ -50,4 +50,4 @@ Then follow the interactive menu in terminal.
 
 ## License
 
-For personal and educational use.
+GPL-3.0
