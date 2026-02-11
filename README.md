@@ -19,6 +19,20 @@ It is designed for users who want a single interactive script to install service
 - V2Ray + TLS + WebSocket
 - Snell
 
+## Service Highlights
+
+### Shadowsocks-rust
+- Supports mainstream ciphers (including AES-GCM and 2022-blake3 series)
+- Fast and stable for daily use
+
+### VLESS + Reality
+- Can run without domain binding
+- Or use your own custom domain when needed
+
+### Hysteria 2
+- Supports port hopping (Port Hopping)
+- Good performance under unstable network conditions
+
 ## Requirements
 
 - Linux server (Ubuntu/Debian recommended)
