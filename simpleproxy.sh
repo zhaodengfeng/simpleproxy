@@ -78,11 +78,42 @@ install_common_deps() {
     fi
 }
 
+# Secure remote script execution helper (HTTPS + basic validation + fail-fast)
+run_remote_script() {
+    local script_url="$1"
+    shift
+
+    local tmp_script
+    tmp_script=$(mktemp /tmp/simpleproxy-remote.XXXXXX.sh) || return 1
+
+    if ! curl -fL --proto '=https' --tlsv1.2 --retry 3 --retry-delay 1 "$script_url" -o "$tmp_script"; then
+        echo -e "${RED}下载远程脚本失败: ${script_url}${NC}"
+        rm -f "$tmp_script"
+        return 1
+    fi
+
+    # Basic integrity/sanity check
+    if [ ! -s "$tmp_script" ] || ! head -n 1 "$tmp_script" | grep -qE '^#!/'; then
+        echo -e "${RED}远程脚本校验失败(空文件或缺少 shebang): ${script_url}${NC}"
+        rm -f "$tmp_script"
+        return 1
+    fi
+
+    if ! bash "$tmp_script" "$@"; then
+        echo -e "${RED}远程脚本执行失败: ${script_url}${NC}"
+        rm -f "$tmp_script"
+        return 1
+    fi
+
+    rm -f "$tmp_script"
+    return 0
+}
+
 # Install acme.sh for SSL certificates
 install_acme() {
     if [ ! -f "$HOME/.acme.sh/acme.sh" ]; then
         echo -e "${BLUE}Installing acme.sh...${NC}"
-        curl https://get.acme.sh | sh -s email=admin@localhost.com
+        curl -fsSL --proto '=https' --tlsv1.2 https://get.acme.sh | sh -s email=admin@localhost.com
         # Set Let's Encrypt as default CA (not ZeroSSL)
         ~/.acme.sh/acme.sh --set-default-ca --server letsencrypt
     fi
@@ -150,7 +181,7 @@ apply_ssl() {
                 cp /etc/letsencrypt/live/${domain}/fullchain.pem /usr/local/etc/xray/certs/${domain}.crt
                 cp /etc/letsencrypt/live/${domain}/privkey.pem /usr/local/etc/xray/certs/${domain}.key
                 chmod 644 /usr/local/etc/xray/certs/${domain}.crt
-                chmod 644 /usr/local/etc/xray/certs/${domain}.key
+                chmod 600 /usr/local/etc/xray/certs/${domain}.key
                 
                 return 0
             else
@@ -193,14 +224,14 @@ apply_ssl() {
     chmod 755 /etc/letsencrypt/live
     chmod 755 /etc/letsencrypt/archive 2>/dev/null || true
     chmod 644 /etc/letsencrypt/live/$domain/fullchain.pem
-    chmod 644 /etc/letsencrypt/live/$domain/privkey.pem
+    chmod 600 /etc/letsencrypt/live/$domain/privkey.pem
     
     # Create a copy in Xray directory with proper permissions (more secure)
     mkdir -p /usr/local/etc/xray/certs
     cp /etc/letsencrypt/live/$domain/fullchain.pem /usr/local/etc/xray/certs/${domain}.crt
     cp /etc/letsencrypt/live/$domain/privkey.pem /usr/local/etc/xray/certs/${domain}.key
     chmod 644 /usr/local/etc/xray/certs/${domain}.crt
-    chmod 644 /usr/local/etc/xray/certs/${domain}.key
+    chmod 600 /usr/local/etc/xray/certs/${domain}.key
     
     echo -e "${GREEN}SSL证书安装成功!${NC}"
     return 0
@@ -219,7 +250,7 @@ for domain in \$(find /etc/letsencrypt/live -mindepth 1 -maxdepth 1 -type d | xa
         cp /etc/letsencrypt/live/\$domain/fullchain.pem /usr/local/etc/xray/certs/\${domain}.crt
         cp /etc/letsencrypt/live/\$domain/privkey.pem /usr/local/etc/xray/certs/\${domain}.key
         chmod 644 /usr/local/etc/xray/certs/\${domain}.crt
-        chmod 644 /usr/local/etc/xray/certs/\${domain}.key
+        chmod 600 /usr/local/etc/xray/certs/\${domain}.key
     fi
 done
 systemctl restart xray.service 2>/dev/null || true
@@ -228,7 +259,7 @@ EOF
     
     # Also add to acme.sh reloadcmd for immediate updates
     ~/.acme.sh/acme.sh --installcert -d $domain --ecc \
-        --reloadcmd "cp /etc/letsencrypt/live/$domain/fullchain.pem /usr/local/etc/xray/certs/${domain}.crt && cp /etc/letsencrypt/live/$domain/privkey.pem /usr/local/etc/xray/certs/${domain}.key && chmod 644 /usr/local/etc/xray/certs/${domain}.* && systemctl restart xray.service 2>/dev/null || true"
+        --reloadcmd "cp /etc/letsencrypt/live/$domain/fullchain.pem /usr/local/etc/xray/certs/${domain}.crt && cp /etc/letsencrypt/live/$domain/privkey.pem /usr/local/etc/xray/certs/${domain}.key && chmod 644 /usr/local/etc/xray/certs/${domain}.crt && chmod 600 /usr/local/etc/xray/certs/${domain}.key && systemctl restart xray.service 2>/dev/null || true"
     
     # Add cron job for certificate renewal
     (crontab -l 2>/dev/null | grep -v "acme.sh --cron"; echo "0 3 * * * $HOME/.acme.sh/acme.sh --cron --home \"$HOME/.acme.sh\" > /dev/null 2>&1") | crontab -
@@ -339,13 +370,25 @@ install_ssrust() {
     local download_url="https://github.com/shadowsocks/shadowsocks-rust/releases/download/${ssrust_version}/shadowsocks-${ssrust_version}.${download_arch}.tar.xz"
     
     cd /tmp
-    wget -q --show-progress "$download_url" -O ss-rust.tar.xz
-    tar -xf ss-rust.tar.xz
+    if ! wget -q --show-progress "$download_url" -O ss-rust.tar.xz; then
+        echo -e "${RED}下载 Shadowsocks-rust 失败${NC}"
+        return 1
+    fi
+    if ! tar -xf ss-rust.tar.xz; then
+        echo -e "${RED}解压 Shadowsocks-rust 失败${NC}"
+        rm -f ss-rust.tar.xz
+        return 1
+    fi
     mv ssserver /usr/local/bin/
     mv ssmanager /usr/local/bin/ 2>/dev/null || true
     mv ssurl /usr/local/bin/ 2>/dev/null || true
     mv ssservice /usr/local/bin/ 2>/dev/null || true
     chmod +x /usr/local/bin/ssserver
+    if [ ! -x /usr/local/bin/ssserver ]; then
+        echo -e "${RED}ssserver 安装失败或不可执行${NC}"
+        rm -f ss-rust.tar.xz sslocal ssmanager ssurl ssservice 2>/dev/null || true
+        return 1
+    fi
     rm -f ss-rust.tar.xz sslocal ssmanager ssurl ssservice 2>/dev/null || true
     
     mkdir -p /etc/shadowsocks
@@ -430,6 +473,7 @@ EOF
 
 ss://$(echo -n "${smethod}:${sspass}" | base64 -w 0)@$(getIP):${ssport}#Shadowsocks
 EOF
+    chmod 600 /etc/shadowsocks/client.json
     
     echo ""
     echo -e "${GREEN}Shadowsocks-rust 安装完成!${NC}"
@@ -454,10 +498,22 @@ upgrade_ssrust() {
     esac
     
     cd /tmp
-    wget -q "https://github.com/shadowsocks/shadowsocks-rust/releases/download/${ssrust_version}/shadowsocks-${ssrust_version}.${download_arch}.tar.xz" -O ss-rust.tar.xz
-    tar -xf ss-rust.tar.xz
+    if ! wget -q "https://github.com/shadowsocks/shadowsocks-rust/releases/download/${ssrust_version}/shadowsocks-${ssrust_version}.${download_arch}.tar.xz" -O ss-rust.tar.xz; then
+        echo -e "${RED}下载 Shadowsocks-rust 失败${NC}"
+        return 1
+    fi
+    if ! tar -xf ss-rust.tar.xz; then
+        echo -e "${RED}解压 Shadowsocks-rust 失败${NC}"
+        rm -f ss-rust.tar.xz
+        return 1
+    fi
     mv ssserver /usr/local/bin/
     chmod +x /usr/local/bin/ssserver
+    if [ ! -x /usr/local/bin/ssserver ]; then
+        echo -e "${RED}ssserver 升级后不可执行${NC}"
+        rm -f ss-rust.tar.xz
+        return 1
+    fi
     rm -f ss-rust.tar.xz
     
     systemctl start shadowsocks.service
@@ -524,7 +580,7 @@ install_reality() {
     # Install Xray if not installed
     if ! command -v xray &> /dev/null; then
         echo -e "${BLUE}正在安装 Xray...${NC}"
-        bash -c "$(curl -L https://github.com/XTLS/Xray-install/raw/main/install-release.sh)" @ install
+        run_remote_script "https://github.com/XTLS/Xray-install/raw/main/install-release.sh" @ install || return 1
         xray_installed=true
     fi
     
@@ -556,12 +612,18 @@ install_reality() {
     fi
     
     local rprivatekey=$(echo "$key_output" | grep "PrivateKey:" | awk '{print $2}' | tr -d '[:space:]')
-    local rpublickey=$(echo "$key_output" | grep "Password:" | awk '{print $2}' | tr -d '[:space:]')
+    local rpublickey=$(echo "$key_output" | grep -E "PublicKey:|Password:" | head -1 | awk '{print $2}' | tr -d '[:space:]')
     
     echo -e "${BLUE}私钥长度: ${#rprivatekey}, 公钥长度: ${#rpublickey}${NC}"
     
     if [ -z "$rprivatekey" ] || [ ${#rprivatekey} -lt 40 ]; then
         echo -e "${RED}错误: 无法生成 X25519 私钥 (长度: ${#rprivatekey})${NC}"
+        echo -e "${YELLOW}Xray 输出: ${key_output}${NC}"
+        return 1
+    fi
+
+    if [ -z "$rpublickey" ] || [ ${#rpublickey} -lt 40 ]; then
+        echo -e "${RED}错误: 无法解析 X25519 公钥 (长度: ${#rpublickey})${NC}"
         echo -e "${YELLOW}Xray 输出: ${key_output}${NC}"
         return 1
     fi
@@ -624,6 +686,7 @@ SNI: ${rsni}
 
 vless://${ruuid}@${rdomain}:${rport}?security=tls&sni=${rsni}&flow=xtls-rprx-vision&encryption=none#Reality-TLS
 EOF
+        chmod 600 /usr/local/etc/xray/reclient.json
     else
         # Use Reality with steal certificate mode
         cat > /usr/local/etc/xray/config.json <<EOF
@@ -683,6 +746,7 @@ Server Name: ${rsni}
 
 vless://${ruuid}@${server_ip}:${rport}?security=reality&sni=${rsni}&pbk=${rpublickey}&sid=${rshortid}&flow=xtls-rprx-vision&encryption=none#Reality
 EOF
+        chmod 600 /usr/local/etc/xray/reclient.json
     fi
     
     # Ensure service is properly configured
@@ -775,14 +839,14 @@ EOF
 
 upgrade_reality() {
     echo -e "${BLUE}Upgrading Xray...${NC}"
-    bash -c "$(curl -L https://github.com/XTLS/Xray-install/raw/main/install-release.sh)" @ install
+    run_remote_script "https://github.com/XTLS/Xray-install/raw/main/install-release.sh" @ install || return 1
     systemctl restart xray.service
     echo -e "${GREEN}Xray 升级完成!${NC}"
 }
 
 uninstall_reality() {
     echo -e "${BLUE}Uninstalling Reality (Xray)...${NC}"
-    bash -c "$(curl -L https://github.com/XTLS/Xray-install/raw/main/install-release.sh)" @ remove
+    run_remote_script "https://github.com/XTLS/Xray-install/raw/main/install-release.sh" @ remove || return 1
     rm -rf /usr/local/etc/xray
     echo -e "${GREEN}Reality 已卸载${NC}"
 }
@@ -812,6 +876,19 @@ install_hy2() {
         echo -e "${RED}错误: 端口 ${hyport} 已被占用${NC}"
         return 1
     fi
+
+    # Ensure hysteria binary exists on first install path
+    if ! command -v hysteria >/dev/null 2>&1; then
+        echo -e "${BLUE}未检测到 hysteria，正在安装...${NC}"
+        run_remote_script "https://get.hy2.sh/" || return 1
+    fi
+    if ! command -v hysteria >/dev/null 2>&1 || [ ! -x "$(command -v hysteria)" ]; then
+        echo -e "${RED}错误: hysteria 安装失败或不可执行${NC}"
+        return 1
+    fi
+    echo -e "${GREEN}hysteria 版本: $(hysteria version 2>/dev/null | head -1)${NC}"
+
+    mkdir -p /etc/hysteria
     
     # Ask for port hopping
     echo ""
@@ -1009,6 +1086,7 @@ ${hop_info}
 
 hysteria2://${hypass}@${hyserver}:${hyport}$( [ "$hyinsecure" == "1" ] && echo "?insecure=1" || echo "" )$( [ -n "$hop_start" ] && echo "&hop=${hop_start}-${hop_end}&hop_interval=${hop_interval}" || echo "" )#Hysteria2
 EOF
+    chmod 600 /etc/hysteria/hyclient.json
     
     echo ""
     echo -e "${GREEN}Hysteria2 安装完成!${NC}"
@@ -1018,7 +1096,7 @@ EOF
 upgrade_hy2() {
     echo -e "${BLUE}Upgrading Hysteria2...${NC}"
     systemctl stop hysteria-server.service
-    bash <(curl -fsSL https://get.hy2.sh/)
+    run_remote_script "https://get.hy2.sh/" || return 1
     systemctl start hysteria-server.service
     echo -e "${GREEN}Hysteria2 升级完成!${NC}"
 }
@@ -1077,7 +1155,7 @@ install_v2ray_ws() {
     # Install Xray (includes V2Ray core)
     if ! command -v xray &> /dev/null; then
         echo -e "${BLUE}正在安装 Xray...${NC}"
-        bash -c "$(curl -L https://github.com/XTLS/Xray-install/raw/main/install-release.sh)" @ install
+        run_remote_script "https://github.com/XTLS/Xray-install/raw/main/install-release.sh" @ install || return 1
     fi
     
     mkdir -p /usr/local/etc/xray
@@ -1270,6 +1348,7 @@ SNI: ${DOMAIN}
 
 vmess://$(echo -n '{"v":"2","ps":"V2Ray-WS","add":"${DOMAIN}","port":"${GET_PORT}","id":"${vuuid}","aid":"0","net":"ws","type":"none","host":"${DOMAIN}","path":"${vpath}","tls":"tls"}' | base64 -w 0)
 EOF
+        chmod 600 /usr/local/etc/xray/v2client.json
     else
         cat > /usr/local/etc/xray/v2client.json <<EOF
 =========== V2Ray + TLS 配置信息 ===========
@@ -1284,6 +1363,7 @@ SNI: ${DOMAIN}
 
 vmess://$(echo -n '{"v":"2","ps":"V2Ray-TLS","add":"${DOMAIN}","port":"${vport}","id":"${vuuid}","aid":"0","net":"tcp","type":"none","tls":"tls"}' | base64 -w 0)
 EOF
+        chmod 600 /usr/local/etc/xray/v2client.json
     fi
     
     # Setup auto-renewal
@@ -1296,7 +1376,7 @@ EOF
 
 upgrade_v2ray_ws() {
     echo -e "${BLUE}Upgrading Xray...${NC}"
-    bash -c "$(curl -L https://github.com/XTLS/Xray-install/raw/main/install-release.sh)" @ install
+    run_remote_script "https://github.com/XTLS/Xray-install/raw/main/install-release.sh" @ install || return 1
     systemctl restart xray.service
     echo -e "${GREEN}Xray 升级完成!${NC}"
 }
@@ -1304,7 +1384,7 @@ upgrade_v2ray_ws() {
 uninstall_v2ray_ws() {
     echo -e "${BLUE}Uninstalling V2Ray...${NC}"
     systemctl stop xray.service nginx.service 2>/dev/null || true
-    bash -c "$(curl -L https://github.com/XTLS/Xray-install/raw/main/install-release.sh)" @ remove
+    run_remote_script "https://github.com/XTLS/Xray-install/raw/main/install-release.sh" @ remove || return 1
     rm -rf /usr/local/etc/xray
     rm -f /etc/systemd/system/xray.service
     systemctl daemon-reload
@@ -1472,6 +1552,7 @@ DNS: ${sndns}
 
 snell://${snpsk}@${server_ip}:${snport}?version=5#Snell
 EOF
+    chmod 600 /etc/snell/client.json
     
     echo ""
     echo -e "${GREEN}Snell 安装完成!${NC}"
