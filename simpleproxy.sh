@@ -155,10 +155,34 @@ EOF
     systemctl daemon-reload
 }
 
+rotate_log_if_needed() {
+    local max_size=$((10*1024*1024)) # 10MB
+    local keep=5
+
+    [ -f "$LOG_FILE" ] || return 0
+
+    local size
+    size=$(stat -c%s "$LOG_FILE" 2>/dev/null || echo 0)
+    [ "$size" -lt "$max_size" ] && return 0
+
+    local i
+    for ((i=keep; i>=1; i--)); do
+        if [ -f "${LOG_FILE}.${i}" ]; then
+            if [ "$i" -eq "$keep" ]; then
+                rm -f "${LOG_FILE}.${i}"
+            else
+                mv "${LOG_FILE}.${i}" "${LOG_FILE}.$((i+1))"
+            fi
+        fi
+    done
+    mv "$LOG_FILE" "${LOG_FILE}.1"
+}
+
 log_msg() {
     local level="$1"
     shift
     mkdir -p "$(dirname "$LOG_FILE")" 2>/dev/null || true
+    rotate_log_if_needed
     printf '[%s] [%s] %s\n' "$(date '+%F %T')" "$level" "$*" >> "$LOG_FILE"
 }
 
