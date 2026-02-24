@@ -44,6 +44,9 @@ gen_uuid() {
 # Global variables
 DOMAIN=""
 GET_PORT=""
+STATE_DIR="/var/lib/simpleproxy"
+EXPORT_DIR="/var/lib/simpleproxy/exports"
+BACKUP_ROOT="/var/backups/simpleproxy"
 
 # Get server IP (HTTPS + multi-source fallback)
 getIP() {
@@ -78,16 +81,119 @@ backup_file() {
 }
 
 confirm_xray_overwrite() {
-    if [ -f /usr/local/etc/xray/config.json ]; then
-        echo -e "${YELLOW}检测到已有 Xray 配置。继续安装会覆盖当前 Xray 配置。${NC}"
+    local target_config="${1:-/usr/local/etc/xray/config.json}"
+    if [ -f "$target_config" ]; then
+        echo -e "${YELLOW}检测到已有 Xray 配置: ${target_config}。继续安装会覆盖该配置。${NC}"
         read -p "是否继续并覆盖? (y/N): " overwrite_confirm
         if [[ ! "$overwrite_confirm" =~ ^[Yy]$ ]]; then
             echo -e "${YELLOW}已取消安装，未覆盖现有 Xray 配置。${NC}"
             return 1
         fi
-        backup_file /usr/local/etc/xray/config.json
+        backup_file "$target_config"
     fi
     return 0
+}
+
+ensure_runtime_dirs() {
+    mkdir -p "$STATE_DIR" "$EXPORT_DIR" "$BACKUP_ROOT"
+}
+
+mark_installed() {
+    ensure_runtime_dirs
+    echo "installed_at=$(date -Iseconds)" > "$STATE_DIR/$1.state"
+}
+
+mark_uninstalled() {
+    rm -f "$STATE_DIR/$1.state"
+}
+
+is_marked_installed() {
+    [ -f "$STATE_DIR/$1.state" ]
+}
+
+export_json() {
+    local name="$1"
+    local content="$2"
+    ensure_runtime_dirs
+    printf '%s\n' "$content" > "$EXPORT_DIR/${name}.json"
+}
+
+backup_upgrade_context() {
+    local name="$1"
+    local ts
+    ts=$(date +%Y%m%d%H%M%S)
+    local dir="$BACKUP_ROOT/${name}-${ts}"
+    mkdir -p "$dir"
+    echo "$dir"
+}
+
+rollback_file_if_needed() {
+    local backup_file="$1"
+    local target_file="$2"
+    [ -f "$backup_file" ] && cp -f "$backup_file" "$target_file"
+}
+
+ensure_xray_service_unit() {
+    local svc="$1"
+    local cfg="$2"
+    cat > "/etc/systemd/system/${svc}.service" <<EOF
+[Unit]
+Description=Xray Service (${svc})
+After=network.target nss-lookup.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/xray run -config ${cfg}
+Restart=on-failure
+RestartSec=3
+LimitNOFILE=1048576
+
+[Install]
+WantedBy=multi-user.target
+EOF
+    systemctl daemon-reload
+}
+
+health_check() {
+    echo ""
+    echo -e "${YELLOW}=========== 一键健康检查 ===========${NC}"
+    local services=("shadowsocks.service" "xray-reality.service" "xray-v2ray.service" "hysteria-server.service" "snell.service")
+    for s in "${services[@]}"; do
+        if systemctl is-active --quiet "$s" 2>/dev/null; then
+            echo -e "${GREEN}✓ $s: 运行中${NC}"
+        else
+            echo -e "${YELLOW}○ $s: 未运行${NC}"
+        fi
+    done
+    echo ""
+    echo -e "${BLUE}监听端口(关键服务):${NC}"
+    ss -tulpen 2>/dev/null | grep -E 'ssserver|xray|hysteria|snell' || echo "未检测到相关监听（或 ss 不可用）"
+    echo ""
+    if [ -d /etc/letsencrypt/live ]; then
+        echo -e "${BLUE}证书到期检查:${NC}"
+        for crt in /etc/letsencrypt/live/*/fullchain.pem; do
+            [ -f "$crt" ] || continue
+            local d
+            d=$(basename "$(dirname "$crt")")
+            local end epoch now days
+            end=$(openssl x509 -in "$crt" -noout -enddate 2>/dev/null | cut -d= -f2)
+            epoch=$(date -d "$end" +%s 2>/dev/null)
+            now=$(date +%s)
+            days=$(( (epoch-now)/86400 ))
+            echo "- $d: 剩余 ${days} 天"
+        done
+    fi
+    echo ""
+    echo -e "${BLUE}防火墙工具:${NC}"
+    command -v ufw >/dev/null 2>&1 && echo "- ufw 已安装（建议: ufw status）"
+    command -v firewall-cmd >/dev/null 2>&1 && echo "- firewalld 已安装（建议: firewall-cmd --list-all）"
+    echo ""
+    echo -e "${BLUE}最近日志(每项5行):${NC}"
+    journalctl -u xray-reality.service -n 5 --no-pager 2>/dev/null || true
+    journalctl -u xray-v2ray.service -n 5 --no-pager 2>/dev/null || true
+    journalctl -u hysteria-server.service -n 5 --no-pager 2>/dev/null || true
+    journalctl -u snell.service -n 5 --no-pager 2>/dev/null || true
+    journalctl -u shadowsocks.service -n 5 --no-pager 2>/dev/null || true
 }
 
 # Check system type
@@ -302,13 +408,14 @@ for domain in \$(find /etc/letsencrypt/live -mindepth 1 -maxdepth 1 -type d | xa
         chmod 600 /usr/local/etc/xray/certs/\${domain}.key
     fi
 done
-systemctl restart xray.service 2>/dev/null || true
+systemctl restart xray-reality.service 2>/dev/null || true
+systemctl restart xray-v2ray.service 2>/dev/null || true
 EOF
     chmod +x /etc/letsencrypt/renewal-hooks/deploy/xray-certs.sh 2>/dev/null || true
     
     # Also add to acme.sh reloadcmd for immediate updates
     ~/.acme.sh/acme.sh --installcert -d $domain --ecc \
-        --reloadcmd "cp /etc/letsencrypt/live/$domain/fullchain.pem /usr/local/etc/xray/certs/${domain}.crt && cp /etc/letsencrypt/live/$domain/privkey.pem /usr/local/etc/xray/certs/${domain}.key && chmod 644 /usr/local/etc/xray/certs/${domain}.crt && chmod 600 /usr/local/etc/xray/certs/${domain}.key && systemctl restart xray.service 2>/dev/null || true"
+        --reloadcmd "cp /etc/letsencrypt/live/$domain/fullchain.pem /usr/local/etc/xray/certs/${domain}.crt && cp /etc/letsencrypt/live/$domain/privkey.pem /usr/local/etc/xray/certs/${domain}.key && chmod 644 /usr/local/etc/xray/certs/${domain}.crt && chmod 600 /usr/local/etc/xray/certs/${domain}.key && systemctl restart xray-reality.service 2>/dev/null || true && systemctl restart xray-v2ray.service 2>/dev/null || true"
     
     # Add cron job for certificate renewal
     (crontab -l 2>/dev/null | grep -v "acme.sh --cron"; echo "0 3 * * * $HOME/.acme.sh/acme.sh --cron --home \"$HOME/.acme.sh\" > /dev/null 2>&1") | crontab -
@@ -523,6 +630,8 @@ EOF
 ss://$(echo -n "${smethod}:${sspass}" | base64 -w 0)@$(getIP):${ssport}#Shadowsocks
 EOF
     chmod 600 /etc/shadowsocks/client.json
+    mark_installed ssrust
+    export_json "ssrust" "{\"protocol\":\"shadowsocks\",\"server\":\"$(getIP)\",\"port\":${ssport},\"method\":\"${smethod}\"}"
     
     echo ""
     echo -e "${GREEN}Shadowsocks-rust 安装完成!${NC}"
@@ -531,6 +640,10 @@ EOF
 
 upgrade_ssrust() {
     echo -e "${BLUE}Upgrading Shadowsocks-rust...${NC}"
+    local bak
+    bak=$(backup_upgrade_context "ssrust")
+    cp -f /etc/shadowsocks/config.json "$bak/config.json" 2>/dev/null || true
+    cp -f /usr/local/bin/ssserver "$bak/ssserver" 2>/dev/null || true
     systemctl stop shadowsocks.service
     
     local ssrust_version=$(curl -sIL "https://github.com/shadowsocks/shadowsocks-rust/releases/latest" | grep -i location | sed -E 's/.*tag\/(v[0-9.]+).*/\1/')
@@ -549,10 +662,14 @@ upgrade_ssrust() {
     cd /tmp
     if ! wget -q "https://github.com/shadowsocks/shadowsocks-rust/releases/download/${ssrust_version}/shadowsocks-${ssrust_version}.${download_arch}.tar.xz" -O ss-rust.tar.xz; then
         echo -e "${RED}下载 Shadowsocks-rust 失败${NC}"
+        rollback_file_if_needed "$bak/ssserver" /usr/local/bin/ssserver
+        rollback_file_if_needed "$bak/config.json" /etc/shadowsocks/config.json
         return 1
     fi
     if ! tar -xf ss-rust.tar.xz; then
         echo -e "${RED}解压 Shadowsocks-rust 失败${NC}"
+        rollback_file_if_needed "$bak/ssserver" /usr/local/bin/ssserver
+        rollback_file_if_needed "$bak/config.json" /etc/shadowsocks/config.json
         rm -f ss-rust.tar.xz
         return 1
     fi
@@ -576,6 +693,8 @@ uninstall_ssrust() {
     rm -f /usr/local/bin/ssserver /usr/local/bin/ssservice /usr/local/bin/ssurl /usr/local/bin/ssmanager
     rm -rf /etc/shadowsocks
     rm -f /etc/systemd/system/shadowsocks.service
+    mark_uninstalled ssrust
+    rm -f "$EXPORT_DIR/ssrust.json"
     systemctl daemon-reload
     echo -e "${GREEN}Shadowsocks-rust 已卸载${NC}"
 }
@@ -679,13 +798,13 @@ install_reality() {
     fi
     
     mkdir -p /usr/local/etc/xray
-    confirm_xray_overwrite || return 1
+    confirm_xray_overwrite /usr/local/etc/xray/reality.json || return 1
     
     if [ -n "$rdomain" ]; then
         # TLS mode should use the certificate domain as SNI
         client_sni="$rdomain"
         # Use TLS with real certificate
-        cat > /usr/local/etc/xray/config.json <<EOF
+        cat > /usr/local/etc/xray/reality.json <<EOF
 {
   "inbounds": [
     {
@@ -742,7 +861,7 @@ EOF
         chmod 600 /usr/local/etc/xray/reclient.json
     else
         # Use Reality with steal certificate mode
-        cat > /usr/local/etc/xray/config.json <<EOF
+        cat > /usr/local/etc/xray/reality.json <<EOF
 {
   "inbounds": [
     {
@@ -804,7 +923,8 @@ EOF
     
     # Ensure service is properly configured
     systemctl daemon-reload
-    systemctl enable xray.service
+    ensure_xray_service_unit "xray-reality" "/usr/local/etc/xray/reality.json"
+    systemctl enable xray-reality.service
     
     # Sync to ensure config is written to disk
     sync
@@ -812,7 +932,7 @@ EOF
     
     # Validate config before starting
     echo -e "${BLUE}正在验证 Xray 配置...${NC}"
-    local test_output=$(xray -test -config /usr/local/etc/xray/config.json 2>&1)
+    local test_output=$(xray -test -config /usr/local/etc/xray/reality.json 2>&1)
     if echo "$test_output" | grep -q "Configuration OK"; then
         echo -e "${GREEN}✓ 配置验证通过${NC}"
     else
@@ -821,21 +941,21 @@ EOF
         echo "$test_output" | head -5
         echo ""
         echo -e "${YELLOW}配置文件内容:${NC}"
-        cat /usr/local/etc/xray/config.json
+        cat /usr/local/etc/xray/reality.json
         return 1
     fi
     
     # Start service
     echo -e "${BLUE}正在启动 Xray 服务...${NC}"
-    systemctl start xray.service
+    systemctl start xray-reality.service
     sleep 5
     
     # Check if service is running (retry up to 3 times)
     local retry_count=0
     local max_retries=3
     while [ $retry_count -lt $max_retries ]; do
-        if systemctl is-active --quiet xray.service; then
-            echo -e "${GREEN}✓ Reality/Xray 服务已成功启动${NC}"
+        if systemctl is-active --quiet xray-reality.service; then
+            echo -e "${GREEN}✓ Reality 服务已成功启动${NC}"
             break
         fi
         retry_count=$((retry_count + 1))
@@ -846,7 +966,7 @@ EOF
     done
     
     if [ $retry_count -eq $max_retries ]; then
-        echo -e "${RED}✗ Reality/Xray 服务启动失败${NC}"
+        echo -e "${RED}✗ Reality 服务启动失败${NC}"
         echo ""
         echo -e "${YELLOW}=== 诊断信息 ===${NC}"
         
@@ -855,15 +975,15 @@ EOF
         echo ""
         
         echo -e "${YELLOW}2. 检查配置有效性:${NC}"
-        xray -test -config /usr/local/etc/xray/config.json 2>&1
+        xray -test -config /usr/local/etc/xray/reality.json 2>&1
         echo ""
         
         echo -e "${YELLOW}3. 查看服务状态:${NC}"
-        systemctl status xray.service --no-pager 2>&1 | head -10
+        systemctl status xray-reality.service --no-pager 2>&1 | head -10
         echo ""
         
         echo -e "${YELLOW}4. 查看详细日志:${NC}"
-        journalctl -u xray.service -n 20 --no-pager 2>&1
+        journalctl -u xray-reality.service -n 20 --no-pager 2>&1
         echo ""
         
         echo -e "${YELLOW}5. 检查端口占用:${NC}"
@@ -878,37 +998,47 @@ EOF
     echo ""
     echo -e "${BLUE}正在验证服务状态...${NC}"
     sleep 2
-    if systemctl is-active --quiet xray.service; then
+    if systemctl is-active --quiet xray-reality.service; then
         echo -e "${GREEN}✓ 服务验证成功，正在运行${NC}"
     else
-        echo -e "${RED}✗ 服务验证失败，请检查日志: journalctl -u xray.service -n 20${NC}"
+        echo -e "${RED}✗ 服务验证失败，请检查日志: journalctl -u xray-reality.service -n 20${NC}"
         return 1
     fi
     
+    mark_installed reality
+    export_json "reality" "{\"protocol\":\"vless\",\"service\":\"xray-reality.service\",\"config\":\"/usr/local/etc/xray/reality.json\",\"client\":\"/usr/local/etc/xray/reclient.json\"}"
     echo ""
     echo -e "${GREEN}Reality 安装完成!${NC}"
     cat /usr/local/etc/xray/reclient.json
 }
 
 upgrade_reality() {
-    echo -e "${BLUE}Upgrading Xray...${NC}"
-    run_remote_script "https://github.com/XTLS/Xray-install/raw/main/install-release.sh" @ install || return 1
-    systemctl restart xray.service
-    echo -e "${GREEN}Xray 升级完成!${NC}"
+    echo -e "${BLUE}Upgrading Reality(Xray)...${NC}"
+    local bak
+    bak=$(backup_upgrade_context "reality")
+    cp -f /usr/local/etc/xray/reality.json "$bak/reality.json" 2>/dev/null || true
+    run_remote_script "https://github.com/XTLS/Xray-install/raw/main/install-release.sh" @ install || {
+        rollback_file_if_needed "$bak/reality.json" /usr/local/etc/xray/reality.json
+        return 1
+    }
+    systemctl restart xray-reality.service || {
+        rollback_file_if_needed "$bak/reality.json" /usr/local/etc/xray/reality.json
+        systemctl restart xray-reality.service 2>/dev/null || true
+        return 1
+    }
+    echo -e "${GREEN}Reality(Xray) 升级完成!${NC}"
 }
 
 uninstall_reality() {
     echo -e "${BLUE}Uninstalling Reality (Xray)...${NC}"
-
-    # If V2Ray config exists, only remove Reality client profile to avoid breaking shared Xray setup
-    if [ -f /usr/local/etc/xray/v2client.json ]; then
-        rm -f /usr/local/etc/xray/reclient.json
-        echo -e "${YELLOW}检测到 V2Ray 配置存在，已仅移除 Reality 客户端配置(reclient.json)，保留 Xray 服务${NC}"
-        return 0
-    fi
-
-    run_remote_script "https://github.com/XTLS/Xray-install/raw/main/install-release.sh" @ remove || return 1
-    rm -rf /usr/local/etc/xray
+    systemctl stop xray-reality.service 2>/dev/null || true
+    systemctl disable xray-reality.service 2>/dev/null || true
+    rm -f /etc/systemd/system/xray-reality.service
+    rm -f /usr/local/etc/xray/reality.json
+    rm -f /usr/local/etc/xray/reclient.json
+    mark_uninstalled reality
+    rm -f "$EXPORT_DIR/reality.json"
+    systemctl daemon-reload
     echo -e "${GREEN}Reality 已卸载${NC}"
 }
 
@@ -1165,6 +1295,8 @@ ${hop_info}
 ${hy_link}#Hysteria2
 EOF
     chmod 600 /etc/hysteria/hyclient.json
+    mark_installed hysteria2
+    export_json "hysteria2" "{\"protocol\":\"hysteria2\",\"server\":\"${hyserver}\",\"port\":${hyport},\"client\":\"/etc/hysteria/hyclient.json\"}"
     
     echo ""
     echo -e "${GREEN}Hysteria2 安装完成!${NC}"
@@ -1173,8 +1305,16 @@ EOF
 
 upgrade_hy2() {
     echo -e "${BLUE}Upgrading Hysteria2...${NC}"
+    local bak
+    bak=$(backup_upgrade_context "hysteria2")
+    cp -f /etc/hysteria/config.yaml "$bak/config.yaml" 2>/dev/null || true
+    cp -f "$(command -v hysteria)" "$bak/hysteria" 2>/dev/null || true
     systemctl stop hysteria-server.service
-    run_remote_script "https://get.hy2.sh/" || return 1
+    run_remote_script "https://get.hy2.sh/" || {
+        rollback_file_if_needed "$bak/config.yaml" /etc/hysteria/config.yaml
+        rollback_file_if_needed "$bak/hysteria" "$(command -v hysteria)"
+        return 1
+    }
     systemctl start hysteria-server.service
     echo -e "${GREEN}Hysteria2 升级完成!${NC}"
 }
@@ -1186,6 +1326,8 @@ uninstall_hy2() {
     rm -f /usr/local/bin/hysteria
     rm -rf /etc/hysteria
     rm -f /etc/systemd/system/hysteria-server.service
+    mark_uninstalled hysteria2
+    rm -f "$EXPORT_DIR/hysteria2.json"
     systemctl daemon-reload
     echo -e "${GREEN}Hysteria2 已卸载${NC}"
 }
@@ -1237,11 +1379,11 @@ install_v2ray_ws() {
     fi
     
     mkdir -p /usr/local/etc/xray
-    confirm_xray_overwrite || return 1
+    confirm_xray_overwrite /usr/local/etc/xray/v2ray.json || return 1
     
     if [ "$use_nginx" = true ]; then
         # WebSocket mode with Nginx
-        cat > /usr/local/etc/xray/config.json <<EOF
+        cat > /usr/local/etc/xray/v2ray.json <<EOF
 {
   "inbounds": [
     {
@@ -1324,7 +1466,7 @@ EOF
         systemctl restart nginx.service
     else
         # Direct TLS mode without WebSocket
-        cat > /usr/local/etc/xray/config.json <<EOF
+        cat > /usr/local/etc/xray/v2ray.json <<EOF
 {
   "inbounds": [
     {
@@ -1364,7 +1506,8 @@ EOF
     
     # Ensure service is properly configured
     systemctl daemon-reload
-    systemctl enable xray.service
+    ensure_xray_service_unit "xray-v2ray" "/usr/local/etc/xray/v2ray.json"
+    systemctl enable xray-v2ray.service
     
     # Sync to ensure config is written to disk
     sync
@@ -1372,7 +1515,7 @@ EOF
     
     # Validate config before starting
     echo -e "${BLUE}正在验证 Xray 配置...${NC}"
-    local test_output=$(xray -test -config /usr/local/etc/xray/config.json 2>&1)
+    local test_output=$(xray -test -config /usr/local/etc/xray/v2ray.json 2>&1)
     if echo "$test_output" | grep -q "Configuration OK"; then
         echo -e "${GREEN}✓ 配置验证通过${NC}"
     else
@@ -1384,15 +1527,15 @@ EOF
     
     # Start service
     echo -e "${BLUE}正在启动 Xray 服务...${NC}"
-    systemctl start xray.service
+    systemctl start xray-v2ray.service
     sleep 5
     
     # Check if service is running
-    if systemctl is-active --quiet xray.service; then
+    if systemctl is-active --quiet xray-v2ray.service; then
         echo -e "${GREEN}✓ V2Ray 服务已成功启动${NC}"
     else
         echo -e "${RED}✗ V2Ray 服务启动失败${NC}"
-        echo -e "${YELLOW}查看日志: journalctl -u xray.service -n 20${NC}"
+        echo -e "${YELLOW}查看日志: journalctl -u xray-v2ray.service -n 20${NC}"
         return 1
     fi
     
@@ -1433,6 +1576,8 @@ EOF
     
     # Setup auto-renewal
     setup_cert_renewal "$DOMAIN"
+    mark_installed v2ray
+    export_json "v2ray" "{\"protocol\":\"vmess\",\"service\":\"xray-v2ray.service\",\"config\":\"/usr/local/etc/xray/v2ray.json\",\"domain\":\"${DOMAIN}\",\"client\":\"/usr/local/etc/xray/v2client.json\"}"
     
     echo ""
     echo -e "${GREEN}V2Ray 安装完成!${NC}"
@@ -1440,30 +1585,37 @@ EOF
 }
 
 upgrade_v2ray_ws() {
-    echo -e "${BLUE}Upgrading Xray...${NC}"
-    run_remote_script "https://github.com/XTLS/Xray-install/raw/main/install-release.sh" @ install || return 1
-    systemctl restart xray.service
-    echo -e "${GREEN}Xray 升级完成!${NC}"
+    echo -e "${BLUE}Upgrading V2Ray(Xray)...${NC}"
+    local bak
+    bak=$(backup_upgrade_context "v2ray")
+    cp -f /usr/local/etc/xray/v2ray.json "$bak/v2ray.json" 2>/dev/null || true
+    cp -f /etc/nginx/conf.d/simpleproxy.conf "$bak/simpleproxy.conf" 2>/dev/null || true
+    run_remote_script "https://github.com/XTLS/Xray-install/raw/main/install-release.sh" @ install || {
+        rollback_file_if_needed "$bak/v2ray.json" /usr/local/etc/xray/v2ray.json
+        rollback_file_if_needed "$bak/simpleproxy.conf" /etc/nginx/conf.d/simpleproxy.conf
+        return 1
+    }
+    systemctl restart xray-v2ray.service || {
+        rollback_file_if_needed "$bak/v2ray.json" /usr/local/etc/xray/v2ray.json
+        rollback_file_if_needed "$bak/simpleproxy.conf" /etc/nginx/conf.d/simpleproxy.conf
+        systemctl restart xray-v2ray.service 2>/dev/null || true
+        return 1
+    }
+    echo -e "${GREEN}V2Ray(Xray) 升级完成!${NC}"
 }
 
 uninstall_v2ray_ws() {
     echo -e "${BLUE}Uninstalling V2Ray...${NC}"
-
-    # If Reality config exists, only remove V2Ray client profile and nginx conf to avoid breaking shared Xray setup
-    if [ -f /usr/local/etc/xray/reclient.json ]; then
-        rm -f /usr/local/etc/xray/v2client.json
-        rm -f /etc/nginx/conf.d/simpleproxy.conf
-        systemctl restart nginx.service 2>/dev/null || true
-        echo -e "${YELLOW}检测到 Reality 配置存在，已仅移除 V2Ray 客户端配置(v2client.json)与 nginx 转发配置，保留 Xray 服务${NC}"
-        return 0
-    fi
-
-    systemctl stop xray.service nginx.service 2>/dev/null || true
-    run_remote_script "https://github.com/XTLS/Xray-install/raw/main/install-release.sh" @ remove || return 1
-    rm -rf /usr/local/etc/xray
-    rm -f /etc/systemd/system/xray.service
+    systemctl stop xray-v2ray.service nginx.service 2>/dev/null || true
+    systemctl disable xray-v2ray.service 2>/dev/null || true
+    rm -f /etc/systemd/system/xray-v2ray.service
+    rm -f /usr/local/etc/xray/v2ray.json
+    rm -f /usr/local/etc/xray/v2client.json
     rm -f /etc/nginx/conf.d/simpleproxy.conf
+    mark_uninstalled v2ray
+    rm -f "$EXPORT_DIR/v2ray.json"
     systemctl daemon-reload
+    systemctl restart nginx.service 2>/dev/null || true
     echo -e "${GREEN}V2Ray 已卸载${NC}"
 }
 
@@ -1629,6 +1781,8 @@ DNS: ${sndns}
 snell://${snpsk}@${server_ip}:${snport}?version=5#Snell
 EOF
     chmod 600 /etc/snell/client.json
+    mark_installed snell
+    export_json "snell" "{\"protocol\":\"snell\",\"server\":\"${server_ip}\",\"port\":${snport},\"client\":\"/etc/snell/client.json\"}"
     
     echo ""
     echo -e "${GREEN}Snell 安装完成!${NC}"
@@ -1637,6 +1791,10 @@ EOF
 
 upgrade_snell() {
     echo -e "${BLUE}Upgrading Snell...${NC}"
+    local bak
+    bak=$(backup_upgrade_context "snell")
+    cp -f /etc/snell/snell-server.conf "$bak/snell-server.conf" 2>/dev/null || true
+    cp -f /usr/local/bin/snell-server "$bak/snell-server" 2>/dev/null || true
     systemctl stop snell.service
     
     local arch=$(uname -m)
@@ -1668,6 +1826,8 @@ upgrade_snell() {
     
     if ! wget -q --show-progress "$download_url" -O snell.zip 2>/dev/null; then
         echo -e "${RED}下载失败: ${download_url}${NC}"
+        rollback_file_if_needed "$bak/snell-server" /usr/local/bin/snell-server
+        rollback_file_if_needed "$bak/snell-server.conf" /etc/snell/snell-server.conf
         systemctl start snell.service 2>/dev/null || true
         return 1
     fi
@@ -1675,12 +1835,16 @@ upgrade_snell() {
     if ! unzip -o snell.zip >/dev/null 2>&1; then
         echo -e "${RED}解压失败${NC}"
         rm -f snell.zip
+        rollback_file_if_needed "$bak/snell-server" /usr/local/bin/snell-server
+        rollback_file_if_needed "$bak/snell-server.conf" /etc/snell/snell-server.conf
         systemctl start snell.service 2>/dev/null || true
         return 1
     fi
     if [ ! -f snell-server ]; then
         echo -e "${RED}升级包异常: 未找到 snell-server${NC}"
         rm -f snell.zip
+        rollback_file_if_needed "$bak/snell-server" /usr/local/bin/snell-server
+        rollback_file_if_needed "$bak/snell-server.conf" /etc/snell/snell-server.conf
         systemctl start snell.service 2>/dev/null || true
         return 1
     fi
@@ -1688,6 +1852,8 @@ upgrade_snell() {
     mv snell-server /usr/local/bin/ || {
         echo -e "${RED}安装新二进制失败${NC}"
         rm -f snell.zip
+        rollback_file_if_needed "$bak/snell-server" /usr/local/bin/snell-server
+        rollback_file_if_needed "$bak/snell-server.conf" /etc/snell/snell-server.conf
         systemctl start snell.service 2>/dev/null || true
         return 1
     }
@@ -1700,6 +1866,9 @@ upgrade_snell() {
         echo -e "${GREEN}Snell 升级完成!${NC}"
     else
         echo -e "${RED}Snell 升级后服务未运行，请检查: journalctl -u snell.service -n 30${NC}"
+        rollback_file_if_needed "$bak/snell-server" /usr/local/bin/snell-server
+        rollback_file_if_needed "$bak/snell-server.conf" /etc/snell/snell-server.conf
+        systemctl restart snell.service 2>/dev/null || true
         return 1
     fi
 }
@@ -1711,6 +1880,8 @@ uninstall_snell() {
     rm -f /usr/local/bin/snell-server
     rm -rf /etc/snell
     rm -f /etc/systemd/system/snell.service
+    mark_uninstalled snell
+    rm -f "$EXPORT_DIR/snell.json"
     systemctl daemon-reload
     echo -e "${GREEN}Snell 已卸载${NC}"
 }
@@ -1719,52 +1890,54 @@ uninstall_snell() {
 check_installed() {
     echo ""
     echo -e "${YELLOW}=========== 已安装代理状态 ===========${NC}"
-    
-    # Shadowsocks-rust
+
+    local ss_marked=false reality_marked=false hy_marked=false v2_marked=false snell_marked=false
+    is_marked_installed ssrust && ss_marked=true
+    is_marked_installed reality && reality_marked=true
+    is_marked_installed hysteria2 && hy_marked=true
+    is_marked_installed v2ray && v2_marked=true
+    is_marked_installed snell && snell_marked=true
+
     if systemctl is-active --quiet shadowsocks.service 2>/dev/null; then
         echo -e "${GREEN}✓ Shadowsocks-rust: 运行中${NC}"
-    elif [ -f /etc/shadowsocks/config.json ]; then
+    elif [ "$ss_marked" = true ] || [ -f /etc/shadowsocks/config.json ]; then
         echo -e "${YELLOW}○ Shadowsocks-rust: 已安装但未运行${NC}"
     else
         echo -e "${RED}✗ Shadowsocks-rust: 未安装${NC}"
     fi
-    
-    # Reality - check for reclient.json specifically
-    if systemctl is-active --quiet xray.service 2>/dev/null && [ -f /usr/local/etc/xray/reclient.json ]; then
+
+    if systemctl is-active --quiet xray-reality.service 2>/dev/null; then
         echo -e "${GREEN}✓ Reality (Xray): 运行中${NC}"
-    elif [ -f /usr/local/etc/xray/reclient.json ]; then
+    elif [ "$reality_marked" = true ] || [ -f /usr/local/etc/xray/reclient.json ]; then
         echo -e "${YELLOW}○ Reality (Xray): 已安装但未运行${NC}"
     else
         echo -e "${RED}✗ Reality (Xray): 未安装${NC}"
     fi
-    
-    # Hysteria2
+
     if systemctl is-active --quiet hysteria-server.service 2>/dev/null; then
         echo -e "${GREEN}✓ Hysteria2: 运行中${NC}"
-    elif [ -f /etc/hysteria/config.yaml ]; then
+    elif [ "$hy_marked" = true ] || [ -f /etc/hysteria/config.yaml ]; then
         echo -e "${YELLOW}○ Hysteria2: 已安装但未运行${NC}"
     else
         echo -e "${RED}✗ Hysteria2: 未安装${NC}"
     fi
-    
-    # V2Ray+WS - check for v2client.json specifically
-    if systemctl is-active --quiet xray.service 2>/dev/null && [ -f /usr/local/etc/xray/v2client.json ]; then
+
+    if systemctl is-active --quiet xray-v2ray.service 2>/dev/null; then
         echo -e "${GREEN}✓ V2Ray+TLS+WS: 运行中${NC}"
- elif [ -f /usr/local/etc/xray/v2client.json ]; then
+    elif [ "$v2_marked" = true ] || [ -f /usr/local/etc/xray/v2client.json ]; then
         echo -e "${YELLOW}○ V2Ray+TLS+WS: 已安装但未运行${NC}"
     else
         echo -e "${RED}✗ V2Ray+TLS+WS: 未安装${NC}"
     fi
-    
-    # Snell
+
     if systemctl is-active --quiet snell.service 2>/dev/null; then
         echo -e "${GREEN}✓ Snell: 运行中${NC}"
-    elif [ -f /etc/snell/snell-server.conf ]; then
+    elif [ "$snell_marked" = true ] || [ -f /etc/snell/snell-server.conf ]; then
         echo -e "${YELLOW}○ Snell: 已安装但未运行${NC}"
     else
         echo -e "${RED}✗ Snell: 未安装${NC}"
     fi
-    
+
     echo ""
 }
 
@@ -1813,6 +1986,12 @@ show_configs() {
     if [ "$has_config" = false ]; then
         echo ""
         echo -e "${YELLOW}未找到任何代理配置${NC}"
+    fi
+
+    if [ -d "$EXPORT_DIR" ]; then
+        echo ""
+        echo -e "${BLUE}机器可读配置导出目录: ${EXPORT_DIR}${NC}"
+        ls -1 "$EXPORT_DIR" 2>/dev/null | sed 's/^/ - /'
     fi
     
     echo ""
@@ -1941,6 +2120,7 @@ show_menu() {
     echo " 2. 升级代理"
     echo " 3. 卸载代理"
     echo " 4. 查看配置"
+    echo " 5. 一键健康检查"
     echo " 0. 退出"
     echo ""
     read -p "请输入数字: " num
@@ -1950,6 +2130,7 @@ show_menu() {
         2) upgrade_menu ;;
         3) uninstall_menu ;;
         4) show_configs ;;
+        5) health_check; echo ""; read -p "按回车键继续..." ;;
         0) exit 0 ;;
         *) echo -e "${RED}请输入正确数字${NC}"; sleep 2 ;;
     esac
