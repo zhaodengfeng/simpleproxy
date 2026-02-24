@@ -45,14 +45,49 @@ gen_uuid() {
 DOMAIN=""
 GET_PORT=""
 
-# Get server IP
+# Get server IP (HTTPS + multi-source fallback)
 getIP() {
-    local serverIP=
-    serverIP=$(curl -s -4 http://www.cloudflare.com/cdn-cgi/trace 2>/dev/null | grep "ip" | awk -F "[=]" '{print $2}')
+    local serverIP=""
+
+    # Primary source (Cloudflare trace)
+    serverIP=$(curl -s --max-time 6 https://www.cloudflare.com/cdn-cgi/trace 2>/dev/null | awk -F= '/^ip=/{print $2}' | tr -d '\r\n')
+
+    # Fallback sources
     if [[ -z "${serverIP}" ]]; then
-        serverIP=$(curl -s -6 http://www.cloudflare.com/cdn-cgi/trace 2>/dev/null | grep "ip" | awk -F "[=]" '{print $2}')
+        serverIP=$(curl -s --max-time 6 https://ifconfig.co/ip 2>/dev/null | tr -d '\r\n')
     fi
+    if [[ -z "${serverIP}" ]]; then
+        serverIP=$(curl -s --max-time 6 https://api.ipify.org 2>/dev/null | tr -d '\r\n')
+    fi
+
+    # Basic IPv4/IPv6 validation
+    if ! echo "${serverIP}" | grep -qE '^([0-9]{1,3}\.){3}[0-9]{1,3}$|^([0-9a-fA-F:]+:+)+[0-9a-fA-F]+$'; then
+        serverIP=""
+    fi
+
     echo "${serverIP}"
+}
+
+backup_file() {
+    local target_file="$1"
+    if [ -f "$target_file" ]; then
+        local backup_path="${target_file}.bak.$(date +%Y%m%d%H%M%S)"
+        cp -f "$target_file" "$backup_path"
+        echo -e "${YELLOW}已备份: ${backup_path}${NC}"
+    fi
+}
+
+confirm_xray_overwrite() {
+    if [ -f /usr/local/etc/xray/config.json ]; then
+        echo -e "${YELLOW}检测到已有 Xray 配置。继续安装会覆盖当前 Xray 配置。${NC}"
+        read -p "是否继续并覆盖? (y/N): " overwrite_confirm
+        if [[ ! "$overwrite_confirm" =~ ^[Yy]$ ]]; then
+            echo -e "${YELLOW}已取消安装，未覆盖现有 Xray 配置。${NC}"
+            return 1
+        fi
+        backup_file /usr/local/etc/xray/config.json
+    fi
+    return 0
 }
 
 # Check system type
@@ -630,6 +665,7 @@ install_reality() {
     fi
     
     mkdir -p /usr/local/etc/xray
+    confirm_xray_overwrite || return 1
     
     if [ -n "$rdomain" ]; then
         # TLS mode should use the certificate domain as SNI
@@ -1080,6 +1116,21 @@ EOF
         hop_url_param="&hop_interval=${hop_interval}"
     fi
     
+    local hy_query=""
+    if [ "$hyinsecure" == "1" ]; then
+        hy_query="insecure=1"
+    fi
+    if [ -n "$hop_start" ] && [ -n "$hop_end" ]; then
+        if [ -n "$hy_query" ]; then
+            hy_query="${hy_query}&"
+        fi
+        hy_query="${hy_query}hop=${hop_start}-${hop_end}&hop_interval=${hop_interval}"
+    fi
+    local hy_link="hysteria2://${hypass}@${hyserver}:${hyport}"
+    if [ -n "$hy_query" ]; then
+        hy_link="${hy_link}?${hy_query}"
+    fi
+
     cat > /etc/hysteria/hyclient.json <<EOF
 =========== Hysteria2 配置信息 ===========
 服务器地址: ${hyserver}:${hyport}
@@ -1087,7 +1138,7 @@ EOF
 $( [ -n "$hydomain" ] && [ "$hyinsecure" == "0" ] && echo "TLS: 已启用 (Let's Encrypt)" || echo "TLS: 自签名证书 (需跳过验证)" )
 ${hop_info}
 
-hysteria2://${hypass}@${hyserver}:${hyport}$( [ "$hyinsecure" == "1" ] && echo "?insecure=1" || echo "" )$( [ -n "$hop_start" ] && echo "&hop=${hop_start}-${hop_end}&hop_interval=${hop_interval}" || echo "" )#Hysteria2
+${hy_link}#Hysteria2
 EOF
     chmod 600 /etc/hysteria/hyclient.json
     
@@ -1162,6 +1213,7 @@ install_v2ray_ws() {
     fi
     
     mkdir -p /usr/local/etc/xray
+    confirm_xray_overwrite || return 1
     
     if [ "$use_nginx" = true ]; then
         # WebSocket mode with Nginx
@@ -1197,69 +1249,55 @@ install_v2ray_ws() {
 }
 EOF
         
-        # Configure Nginx
-        cat > /etc/nginx/nginx.conf <<EOF
-pid /var/run/nginx.pid;
-worker_processes auto;
-worker_rlimit_nofile 51200;
-events {
-    worker_connections 1024;
-    multi_accept on;
-    use epoll;
-}
-http {
-    server_tokens off;
-    sendfile on;
-    tcp_nopush on;
-    tcp_nodelay on;
-    keepalive_timeout 120s;
-    keepalive_requests 10000;
-    types_hash_max_size 2048;
-    include /etc/nginx/mime.types;
-    access_log off;
-    error_log /dev/null;
-
-    server {
-        listen 80;
-        listen [::]:80;
-        server_name ${DOMAIN};
-        location / {
-            return 301 https://\$server_name\$request_uri;
-        }
+        # Configure Nginx (safe: write dedicated conf.d file, do not overwrite main nginx.conf)
+        mkdir -p /etc/nginx/conf.d
+        backup_file /etc/nginx/conf.d/simpleproxy.conf
+        cat > /etc/nginx/conf.d/simpleproxy.conf <<EOF
+server {
+    listen 80;
+    listen [::]:80;
+    server_name ${DOMAIN};
+    location / {
+        return 301 https://\$server_name\$request_uri;
     }
-    
-    server {
-        listen ${GET_PORT} ssl http2;
-        listen [::]:${GET_PORT} ssl http2;
-        server_name ${DOMAIN};
-        ssl_protocols TLSv1.2 TLSv1.3;
-        ssl_ciphers ECDHE-RSA-AES128-GCM-SHA256:HIGH:!aNULL:!MD5:!RC4:!DHE;
-        ssl_prefer_server_ciphers on;
-        ssl_certificate /etc/letsencrypt/live/${DOMAIN}/fullchain.pem;
-        ssl_certificate_key /etc/letsencrypt/live/${DOMAIN}/privkey.pem;
-        
-        location / {
-            default_type text/plain;
-            return 200 "Hello World!";
-        }
-        
-        location ${vpath} {
-            proxy_redirect off;
-            proxy_pass http://127.0.0.1:${vport};
-            proxy_http_version 1.1;
-            proxy_set_header Upgrade \$http_upgrade;
-            proxy_set_header Connection "upgrade";
-            proxy_set_header Host \$http_host;
-            proxy_read_timeout 86400;
-        }
+}
+
+server {
+    listen ${GET_PORT} ssl http2;
+    listen [::]:${GET_PORT} ssl http2;
+    server_name ${DOMAIN};
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_ciphers ECDHE-RSA-AES128-GCM-SHA256:HIGH:!aNULL:!MD5:!RC4:!DHE;
+    ssl_prefer_server_ciphers on;
+    ssl_certificate /etc/letsencrypt/live/${DOMAIN}/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/${DOMAIN}/privkey.pem;
+
+    location / {
+        default_type text/plain;
+        return 200 "Hello World!";
+    }
+
+    location ${vpath} {
+        proxy_redirect off;
+        proxy_pass http://127.0.0.1:${vport};
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade \$http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host \$http_host;
+        proxy_read_timeout 86400;
     }
 }
 EOF
-        
+
+        if ! nginx -t; then
+            echo -e "${RED}Nginx 配置校验失败，已保留备份并终止安装${NC}"
+            return 1
+        fi
+
         systemctl daemon-reload
         systemctl enable nginx.service
         sleep 1
-        systemctl start nginx.service
+        systemctl restart nginx.service
     else
         # Direct TLS mode without WebSocket
         cat > /usr/local/etc/xray/config.json <<EOF
