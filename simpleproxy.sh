@@ -194,6 +194,9 @@ input_domain() {
 # Apply for SSL certificate
 apply_ssl() {
     local domain=$1
+    local nginx_was_active=0
+    local apache2_was_active=0
+    local httpd_was_active=0
     
     install_acme
     
@@ -228,7 +231,11 @@ apply_ssl() {
     # Create directory
     mkdir -p /etc/letsencrypt/live/$domain
     
-    # Stop services that may use port 80
+    # Stop services that may use port 80 (record original status and restore later)
+    systemctl is-active --quiet nginx && nginx_was_active=1 || true
+    systemctl is-active --quiet apache2 && apache2_was_active=1 || true
+    systemctl is-active --quiet httpd && httpd_was_active=1 || true
+
     echo -e "${BLUE}停止可能占用80端口的服务...${NC}"
     systemctl stop nginx 2>/dev/null || true
     systemctl stop apache2 2>/dev/null || true
@@ -245,6 +252,9 @@ apply_ssl() {
         echo "1. 域名是否正确解析到本机IP"
         echo "2. 80端口是否被其他程序占用"
         echo "3. 防火墙是否放行80端口"
+        [ "$nginx_was_active" -eq 1 ] && systemctl start nginx 2>/dev/null || true
+        [ "$apache2_was_active" -eq 1 ] && systemctl start apache2 2>/dev/null || true
+        [ "$httpd_was_active" -eq 1 ] && systemctl start httpd 2>/dev/null || true
         return 1
     fi
     
@@ -268,6 +278,10 @@ apply_ssl() {
     chmod 644 /usr/local/etc/xray/certs/${domain}.crt
     chmod 600 /usr/local/etc/xray/certs/${domain}.key
     
+    [ "$nginx_was_active" -eq 1 ] && systemctl start nginx 2>/dev/null || true
+    [ "$apache2_was_active" -eq 1 ] && systemctl start apache2 2>/dev/null || true
+    [ "$httpd_was_active" -eq 1 ] && systemctl start httpd 2>/dev/null || true
+
     echo -e "${GREEN}SSL证书安装成功!${NC}"
     return 0
 }
@@ -885,6 +899,14 @@ upgrade_reality() {
 
 uninstall_reality() {
     echo -e "${BLUE}Uninstalling Reality (Xray)...${NC}"
+
+    # If V2Ray config exists, only remove Reality client profile to avoid breaking shared Xray setup
+    if [ -f /usr/local/etc/xray/v2client.json ]; then
+        rm -f /usr/local/etc/xray/reclient.json
+        echo -e "${YELLOW}检测到 V2Ray 配置存在，已仅移除 Reality 客户端配置(reclient.json)，保留 Xray 服务${NC}"
+        return 0
+    fi
+
     run_remote_script "https://github.com/XTLS/Xray-install/raw/main/install-release.sh" @ remove || return 1
     rm -rf /usr/local/etc/xray
     echo -e "${GREEN}Reality 已卸载${NC}"
@@ -925,6 +947,8 @@ install_hy2() {
         echo -e "${RED}错误: hysteria 安装失败或不可执行${NC}"
         return 1
     fi
+    local hysteria_bin
+    hysteria_bin=$(command -v hysteria)
     echo -e "${GREEN}hysteria 版本: $(hysteria version 2>/dev/null | head -1)${NC}"
 
     mkdir -p /etc/hysteria
@@ -1078,7 +1102,7 @@ After=network.target
 
 [Service]
 Type=simple
-ExecStart=/usr/local/bin/hysteria server -c /etc/hysteria/config.yaml
+ExecStart=${hysteria_bin} server -c /etc/hysteria/config.yaml
 Restart=on-failure
 RestartSec=5s
 
@@ -1424,10 +1448,21 @@ upgrade_v2ray_ws() {
 
 uninstall_v2ray_ws() {
     echo -e "${BLUE}Uninstalling V2Ray...${NC}"
+
+    # If Reality config exists, only remove V2Ray client profile and nginx conf to avoid breaking shared Xray setup
+    if [ -f /usr/local/etc/xray/reclient.json ]; then
+        rm -f /usr/local/etc/xray/v2client.json
+        rm -f /etc/nginx/conf.d/simpleproxy.conf
+        systemctl restart nginx.service 2>/dev/null || true
+        echo -e "${YELLOW}检测到 Reality 配置存在，已仅移除 V2Ray 客户端配置(v2client.json)与 nginx 转发配置，保留 Xray 服务${NC}"
+        return 0
+    fi
+
     systemctl stop xray.service nginx.service 2>/dev/null || true
     run_remote_script "https://github.com/XTLS/Xray-install/raw/main/install-release.sh" @ remove || return 1
     rm -rf /usr/local/etc/xray
     rm -f /etc/systemd/system/xray.service
+    rm -f /etc/nginx/conf.d/simpleproxy.conf
     systemctl daemon-reload
     echo -e "${GREEN}V2Ray 已卸载${NC}"
 }
@@ -1632,19 +1667,41 @@ upgrade_snell() {
     local download_url="https://dl.nssurge.com/snell/snell-server-v${snell_version}-linux-${download_arch}.zip"
     
     if ! wget -q --show-progress "$download_url" -O snell.zip 2>/dev/null; then
-        echo -e "${YELLOW}官方源失败，尝试备用链接...${NC}"
-        # Fallback
-        download_url="https://raw.githubusercontent.com/xOS/Others/master/snell/v${snell_version}/snell-server-v${snell_version}-linux-${download_arch}.zip"
-        wget -q --show-progress "$download_url" -O snell.zip
+        echo -e "${RED}下载失败: ${download_url}${NC}"
+        systemctl start snell.service 2>/dev/null || true
+        return 1
     fi
-    
-    unzip -o snell.zip
-    mv snell-server /usr/local/bin/
+
+    if ! unzip -o snell.zip >/dev/null 2>&1; then
+        echo -e "${RED}解压失败${NC}"
+        rm -f snell.zip
+        systemctl start snell.service 2>/dev/null || true
+        return 1
+    fi
+    if [ ! -f snell-server ]; then
+        echo -e "${RED}升级包异常: 未找到 snell-server${NC}"
+        rm -f snell.zip
+        systemctl start snell.service 2>/dev/null || true
+        return 1
+    fi
+
+    mv snell-server /usr/local/bin/ || {
+        echo -e "${RED}安装新二进制失败${NC}"
+        rm -f snell.zip
+        systemctl start snell.service 2>/dev/null || true
+        return 1
+    }
     chmod +x /usr/local/bin/snell-server
     rm -f snell.zip
-    
+
     systemctl start snell.service
-    echo -e "${GREEN}Snell 升级完成!${NC}"
+    sleep 2
+    if systemctl is-active --quiet snell.service; then
+        echo -e "${GREEN}Snell 升级完成!${NC}"
+    else
+        echo -e "${RED}Snell 升级后服务未运行，请检查: journalctl -u snell.service -n 30${NC}"
+        return 1
+    fi
 }
 
 uninstall_snell() {
