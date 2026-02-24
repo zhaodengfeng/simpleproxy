@@ -45,11 +45,6 @@ gen_uuid() {
 DOMAIN=""
 GET_PORT=""
 
-# Optional SHA256 pins for remote installers/scripts (leave empty to skip hash check)
-XRAY_INSTALLER_SHA256=""
-HY2_INSTALLER_SHA256=""
-ACME_INSTALLER_SHA256=""
-
 # Get server IP (HTTPS + multi-source fallback)
 getIP() {
     local serverIP=""
@@ -118,21 +113,10 @@ install_common_deps() {
     fi
 }
 
-# Secure remote script execution helper (HTTPS + optional SHA256 pin + fail-fast)
-# Usage:
-#   run_remote_script <url> [expected_sha256] [script args...]
-# Notes:
-#   - expected_sha256 is optional (64 hex chars). Empty means skip hash check.
-#   - Keeps backward compatibility with old calls like: run_remote_script <url> @ install
+# Secure remote script execution helper (HTTPS + basic validation + fail-fast)
 run_remote_script() {
     local script_url="$1"
     shift
-
-    local expected_sha256=""
-    if [ -n "$1" ] && echo "$1" | grep -qiE '^[a-f0-9]{64}$'; then
-        expected_sha256="$1"
-        shift
-    fi
 
     local tmp_script
     tmp_script=$(mktemp /tmp/simpleproxy-remote.XXXXXX.sh) || return 1
@@ -150,20 +134,6 @@ run_remote_script() {
         return 1
     fi
 
-    # Optional SHA256 verification
-    if [ -n "$expected_sha256" ]; then
-        local actual_sha256
-        actual_sha256=$(sha256sum "$tmp_script" 2>/dev/null | awk '{print $1}')
-        if [ -z "$actual_sha256" ] || [ "$actual_sha256" != "$expected_sha256" ]; then
-            echo -e "${RED}远程脚本 SHA256 校验失败: ${script_url}${NC}"
-            echo -e "${YELLOW}期望: ${expected_sha256}${NC}"
-            echo -e "${YELLOW}实际: ${actual_sha256}${NC}"
-            rm -f "$tmp_script"
-            return 1
-        fi
-        echo -e "${GREEN}SHA256 校验通过: ${script_url}${NC}"
-    fi
-
     if ! bash "$tmp_script" "$@"; then
         echo -e "${RED}远程脚本执行失败: ${script_url}${NC}"
         rm -f "$tmp_script"
@@ -178,7 +148,7 @@ run_remote_script() {
 install_acme() {
     if [ ! -f "$HOME/.acme.sh/acme.sh" ]; then
         echo -e "${BLUE}Installing acme.sh...${NC}"
-        run_remote_script "https://get.acme.sh" "$ACME_INSTALLER_SHA256" -- email=admin@localhost.com || return 1
+        curl -fsSL --proto '=https' --tlsv1.2 https://get.acme.sh | sh -s email=admin@localhost.com
         # Set Let's Encrypt as default CA (not ZeroSSL)
         ~/.acme.sh/acme.sh --set-default-ca --server letsencrypt
     fi
@@ -660,7 +630,7 @@ install_reality() {
     # Install Xray if not installed
     if ! command -v xray &> /dev/null; then
         echo -e "${BLUE}正在安装 Xray...${NC}"
-        run_remote_script "https://github.com/XTLS/Xray-install/raw/main/install-release.sh" "$XRAY_INSTALLER_SHA256" @ install || return 1
+        run_remote_script "https://github.com/XTLS/Xray-install/raw/main/install-release.sh" @ install || return 1
         xray_installed=true
     fi
     
@@ -922,7 +892,7 @@ EOF
 
 upgrade_reality() {
     echo -e "${BLUE}Upgrading Xray...${NC}"
-    run_remote_script "https://github.com/XTLS/Xray-install/raw/main/install-release.sh" "$XRAY_INSTALLER_SHA256" @ install || return 1
+    run_remote_script "https://github.com/XTLS/Xray-install/raw/main/install-release.sh" @ install || return 1
     systemctl restart xray.service
     echo -e "${GREEN}Xray 升级完成!${NC}"
 }
@@ -937,7 +907,7 @@ uninstall_reality() {
         return 0
     fi
 
-    run_remote_script "https://github.com/XTLS/Xray-install/raw/main/install-release.sh" "$XRAY_INSTALLER_SHA256" @ remove || return 1
+    run_remote_script "https://github.com/XTLS/Xray-install/raw/main/install-release.sh" @ remove || return 1
     rm -rf /usr/local/etc/xray
     echo -e "${GREEN}Reality 已卸载${NC}"
 }
@@ -971,7 +941,7 @@ install_hy2() {
     # Ensure hysteria binary exists on first install path
     if ! command -v hysteria >/dev/null 2>&1; then
         echo -e "${BLUE}未检测到 hysteria，正在安装...${NC}"
-        run_remote_script "https://get.hy2.sh/" "$HY2_INSTALLER_SHA256" || return 1
+        run_remote_script "https://get.hy2.sh/" || return 1
     fi
     if ! command -v hysteria >/dev/null 2>&1 || [ ! -x "$(command -v hysteria)" ]; then
         echo -e "${RED}错误: hysteria 安装失败或不可执行${NC}"
@@ -1204,7 +1174,7 @@ EOF
 upgrade_hy2() {
     echo -e "${BLUE}Upgrading Hysteria2...${NC}"
     systemctl stop hysteria-server.service
-    run_remote_script "https://get.hy2.sh/" "$HY2_INSTALLER_SHA256" || return 1
+    run_remote_script "https://get.hy2.sh/" || return 1
     systemctl start hysteria-server.service
     echo -e "${GREEN}Hysteria2 升级完成!${NC}"
 }
@@ -1263,7 +1233,7 @@ install_v2ray_ws() {
     # Install Xray (includes V2Ray core)
     if ! command -v xray &> /dev/null; then
         echo -e "${BLUE}正在安装 Xray...${NC}"
-        run_remote_script "https://github.com/XTLS/Xray-install/raw/main/install-release.sh" "$XRAY_INSTALLER_SHA256" @ install || return 1
+        run_remote_script "https://github.com/XTLS/Xray-install/raw/main/install-release.sh" @ install || return 1
     fi
     
     mkdir -p /usr/local/etc/xray
@@ -1471,7 +1441,7 @@ EOF
 
 upgrade_v2ray_ws() {
     echo -e "${BLUE}Upgrading Xray...${NC}"
-    run_remote_script "https://github.com/XTLS/Xray-install/raw/main/install-release.sh" "$XRAY_INSTALLER_SHA256" @ install || return 1
+    run_remote_script "https://github.com/XTLS/Xray-install/raw/main/install-release.sh" @ install || return 1
     systemctl restart xray.service
     echo -e "${GREEN}Xray 升级完成!${NC}"
 }
@@ -1489,7 +1459,7 @@ uninstall_v2ray_ws() {
     fi
 
     systemctl stop xray.service nginx.service 2>/dev/null || true
-    run_remote_script "https://github.com/XTLS/Xray-install/raw/main/install-release.sh" "$XRAY_INSTALLER_SHA256" @ remove || return 1
+    run_remote_script "https://github.com/XTLS/Xray-install/raw/main/install-release.sh" @ remove || return 1
     rm -rf /usr/local/etc/xray
     rm -f /etc/systemd/system/xray.service
     rm -f /etc/nginx/conf.d/simpleproxy.conf
