@@ -47,6 +47,7 @@ GET_PORT=""
 STATE_DIR="/var/lib/simpleproxy"
 EXPORT_DIR="/var/lib/simpleproxy/exports"
 BACKUP_ROOT="/var/backups/simpleproxy"
+LOG_FILE="/var/log/simpleproxy.log"
 
 # Get server IP (HTTPS + multi-source fallback)
 getIP() {
@@ -154,9 +155,43 @@ EOF
     systemctl daemon-reload
 }
 
+log_msg() {
+    local level="$1"
+    shift
+    mkdir -p "$(dirname "$LOG_FILE")" 2>/dev/null || true
+    printf '[%s] [%s] %s\n' "$(date '+%F %T')" "$level" "$*" >> "$LOG_FILE"
+}
+
+check_firewall_port() {
+    local port="$1"
+    local proto="${2:-tcp}"
+
+    if command -v ufw >/dev/null 2>&1; then
+        if ufw status 2>/dev/null | grep -Eq "${port}/${proto}.*ALLOW"; then
+            echo -e "${GREEN}✓ 防火墙放行: ${port}/${proto} (ufw)${NC}"
+            log_msg "INFO" "Firewall OK ufw ${port}/${proto}"
+        else
+            echo -e "${YELLOW}○ 防火墙可能未放行: ${port}/${proto} (ufw)${NC}"
+            log_msg "WARN" "Firewall maybe missing ufw ${port}/${proto}"
+        fi
+    elif command -v firewall-cmd >/dev/null 2>&1; then
+        if firewall-cmd --list-ports 2>/dev/null | grep -Eq "(^| )${port}/${proto}( |$)"; then
+            echo -e "${GREEN}✓ 防火墙放行: ${port}/${proto} (firewalld)${NC}"
+            log_msg "INFO" "Firewall OK firewalld ${port}/${proto}"
+        else
+            echo -e "${YELLOW}○ 防火墙可能未放行: ${port}/${proto} (firewalld)${NC}"
+            log_msg "WARN" "Firewall maybe missing firewalld ${port}/${proto}"
+        fi
+    else
+        echo -e "${YELLOW}○ 未检测到 ufw/firewalld，请手动确认端口: ${port}/${proto}${NC}"
+        log_msg "WARN" "No firewall tool detected, check ${port}/${proto} manually"
+    fi
+}
+
 health_check() {
     echo ""
     echo -e "${YELLOW}=========== 一键健康检查 ===========${NC}"
+    log_msg "INFO" "Run health_check"
     local services=("shadowsocks.service" "xray-reality.service" "xray-v2ray.service" "hysteria-server.service" "snell.service")
     for s in "${services[@]}"; do
         if systemctl is-active --quiet "$s" 2>/dev/null; then
@@ -425,6 +460,7 @@ EOF
 
 # ==================== Shadowsocks-rust ====================
 install_ssrust() {
+    log_msg "INFO" "Start install_ssrust"
     echo -e "${BLUE}Installing Shadowsocks-rust...${NC}"
     
     # Ask for custom port
@@ -632,6 +668,8 @@ EOF
     chmod 600 /etc/shadowsocks/client.json
     mark_installed ssrust
     export_json "ssrust" "{\"protocol\":\"shadowsocks\",\"server\":\"$(getIP)\",\"port\":${ssport},\"method\":\"${smethod}\"}"
+    check_firewall_port "${ssport}" tcp
+    log_msg "INFO" "install_ssrust done port=${ssport}"
     
     echo ""
     echo -e "${GREEN}Shadowsocks-rust 安装完成!${NC}"
@@ -687,6 +725,7 @@ upgrade_ssrust() {
 }
 
 uninstall_ssrust() {
+    log_msg "INFO" "Start uninstall_ssrust"
     echo -e "${BLUE}Uninstalling Shadowsocks-rust...${NC}"
     systemctl stop shadowsocks.service 2>/dev/null || true
     systemctl disable shadowsocks.service 2>/dev/null || true
@@ -701,6 +740,7 @@ uninstall_ssrust() {
 
 # ==================== Reality (Xray) ====================
 install_reality() {
+    log_msg "INFO" "Start install_reality"
     echo -e "${BLUE}Installing Reality...${NC}"
     
     # Ask for custom port
@@ -1007,6 +1047,8 @@ EOF
     
     mark_installed reality
     export_json "reality" "{\"protocol\":\"vless\",\"service\":\"xray-reality.service\",\"config\":\"/usr/local/etc/xray/reality.json\",\"client\":\"/usr/local/etc/xray/reclient.json\"}"
+    check_firewall_port "${rport}" tcp
+    log_msg "INFO" "install_reality done port=${rport} domain=${rdomain:-none}"
     echo ""
     echo -e "${GREEN}Reality 安装完成!${NC}"
     cat /usr/local/etc/xray/reclient.json
@@ -1030,6 +1072,7 @@ upgrade_reality() {
 }
 
 uninstall_reality() {
+    log_msg "INFO" "Start uninstall_reality"
     echo -e "${BLUE}Uninstalling Reality (Xray)...${NC}"
     systemctl stop xray-reality.service 2>/dev/null || true
     systemctl disable xray-reality.service 2>/dev/null || true
@@ -1044,6 +1087,7 @@ uninstall_reality() {
 
 # ==================== Hysteria2 ====================
 install_hy2() {
+    log_msg "INFO" "Start install_hy2"
     echo -e "${BLUE}Installing Hysteria2...${NC}"
     
     # Ask for custom port
@@ -1297,6 +1341,12 @@ EOF
     chmod 600 /etc/hysteria/hyclient.json
     mark_installed hysteria2
     export_json "hysteria2" "{\"protocol\":\"hysteria2\",\"server\":\"${hyserver}\",\"port\":${hyport},\"client\":\"/etc/hysteria/hyclient.json\"}"
+    check_firewall_port "${hyport}" udp
+    if [ -n "$hop_start" ] && [ -n "$hop_end" ]; then
+        check_firewall_port "${hop_start}" udp
+        check_firewall_port "${hop_end}" udp
+    fi
+    log_msg "INFO" "install_hy2 done port=${hyport} domain=${hydomain:-none}"
     
     echo ""
     echo -e "${GREEN}Hysteria2 安装完成!${NC}"
@@ -1320,6 +1370,7 @@ upgrade_hy2() {
 }
 
 uninstall_hy2() {
+    log_msg "INFO" "Start uninstall_hy2"
     echo -e "${BLUE}Uninstalling Hysteria2...${NC}"
     systemctl stop hysteria-server.service 2>/dev/null || true
     systemctl disable hysteria-server.service 2>/dev/null || true
@@ -1334,6 +1385,7 @@ uninstall_hy2() {
 
 # ==================== V2Ray + TLS + WebSocket ====================
 install_v2ray_ws() {
+    log_msg "INFO" "Start install_v2ray_ws"
     echo -e "${BLUE}Installing V2Ray + TLS + WebSocket...${NC}"
     
     # Input domain
@@ -1578,6 +1630,8 @@ EOF
     setup_cert_renewal "$DOMAIN"
     mark_installed v2ray
     export_json "v2ray" "{\"protocol\":\"vmess\",\"service\":\"xray-v2ray.service\",\"config\":\"/usr/local/etc/xray/v2ray.json\",\"domain\":\"${DOMAIN}\",\"client\":\"/usr/local/etc/xray/v2client.json\"}"
+    check_firewall_port "${GET_PORT}" tcp
+    log_msg "INFO" "install_v2ray_ws done domain=${DOMAIN} ws=${use_nginx}"
     
     echo ""
     echo -e "${GREEN}V2Ray 安装完成!${NC}"
@@ -1605,6 +1659,7 @@ upgrade_v2ray_ws() {
 }
 
 uninstall_v2ray_ws() {
+    log_msg "INFO" "Start uninstall_v2ray"
     echo -e "${BLUE}Uninstalling V2Ray...${NC}"
     systemctl stop xray-v2ray.service nginx.service 2>/dev/null || true
     systemctl disable xray-v2ray.service 2>/dev/null || true
@@ -1621,6 +1676,7 @@ uninstall_v2ray_ws() {
 
 # ==================== Snell ====================
 install_snell() {
+    log_msg "INFO" "Start install_snell"
     echo -e "${BLUE}Installing Snell...${NC}"
     
     # Ask for custom port
@@ -1783,6 +1839,8 @@ EOF
     chmod 600 /etc/snell/client.json
     mark_installed snell
     export_json "snell" "{\"protocol\":\"snell\",\"server\":\"${server_ip}\",\"port\":${snport},\"client\":\"/etc/snell/client.json\"}"
+    check_firewall_port "${snport}" tcp
+    log_msg "INFO" "install_snell done port=${snport}"
     
     echo ""
     echo -e "${GREEN}Snell 安装完成!${NC}"
@@ -1874,6 +1932,7 @@ upgrade_snell() {
 }
 
 uninstall_snell() {
+    log_msg "INFO" "Start uninstall_snell"
     echo -e "${BLUE}Uninstalling Snell...${NC}"
     systemctl stop snell.service 2>/dev/null || true
     systemctl disable snell.service 2>/dev/null || true
