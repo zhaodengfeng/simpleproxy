@@ -1,7 +1,7 @@
 #!/bin/bash
 # SIMPLEPROXY - A Multi-Protocol Proxy Installer
 # Supports: Shadowsocks-rust, Reality, Hysteria2, V2Ray+TLS+WS, Snell
-# Version: 260202d
+# Version: 260224a
 
 if [[ $EUID -ne 0 ]]; then
     clear
@@ -10,7 +10,7 @@ if [[ $EUID -ne 0 ]]; then
 fi
 
 # Script version (format: YYYYMMDD.N)
-SCRIPT_VERSION="260202d"
+SCRIPT_VERSION="260224a"
 
 # Color codes
 RED='\033[0;31m'
@@ -562,6 +562,7 @@ install_reality() {
     local server_ip=$(getIP)
     local rsni="www.microsoft.com"
     local rdomain=""
+    local client_sni="${rsni}"
     local xray_installed=false
     
     # Ask if user wants to use custom domain for TLS mode
@@ -631,6 +632,8 @@ install_reality() {
     mkdir -p /usr/local/etc/xray
     
     if [ -n "$rdomain" ]; then
+        # TLS mode should use the certificate domain as SNI
+        client_sni="$rdomain"
         # Use TLS with real certificate
         cat > /usr/local/etc/xray/config.json <<EOF
 {
@@ -682,9 +685,9 @@ EOF
 UUID: ${ruuid}
 流控: xtls-rprx-vision
 安全: tls
-SNI: ${rsni}
+SNI: ${client_sni}
 
-vless://${ruuid}@${rdomain}:${rport}?security=tls&sni=${rsni}&flow=xtls-rprx-vision&encryption=none#Reality-TLS
+vless://${ruuid}@${rdomain}:${rport}?security=tls&sni=${client_sni}&flow=xtls-rprx-vision&encryption=none#Reality-TLS
 EOF
         chmod 600 /usr/local/etc/xray/reclient.json
     else
