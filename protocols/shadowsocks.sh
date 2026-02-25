@@ -110,32 +110,39 @@ install_shadowsocks() {
     
     local download_url="https://github.com/shadowsocks/shadowsocks-rust/releases/download/${ssrust_version}/shadowsocks-${ssrust_version}.${download_arch}.tar.xz"
     
+    # 创建安全临时目录
+    local tmp_dir
+    tmp_dir=$(mktemp -d /tmp/simpleproxy-ss.XXXXXX) || return 1
+    chmod 700 "$tmp_dir"
+    
     # 下载安装
-    cd /tmp || return 1
-    if ! wget -q --show-progress "$download_url" -O ss-rust.tar.xz; then
+    local download_file="${tmp_dir}/ss-rust.tar.xz"
+    if ! wget -q --show-progress "$download_url" -O "$download_file"; then
         echo -e "${RED}下载 Shadowsocks-rust 失败${NC}"
+        rm -rf "$tmp_dir"
         return 1
     fi
     
-    if ! tar -xf ss-rust.tar.xz; then
+    if ! tar -xf "$download_file" -C "$tmp_dir"; then
         echo -e "${RED}解压 Shadowsocks-rust 失败${NC}"
-        rm -f ss-rust.tar.xz
+        rm -rf "$tmp_dir"
         return 1
     fi
     
-    mv ssserver /usr/local/bin/
-    mv ssmanager /usr/local/bin/ 2>/dev/null || true
-    mv ssurl /usr/local/bin/ 2>/dev/null || true
-    mv ssservice /usr/local/bin/ 2>/dev/null || true
+    mv "${tmp_dir}/ssserver" /usr/local/bin/
+    mv "${tmp_dir}/ssmanager" /usr/local/bin/ 2>/dev/null || true
+    mv "${tmp_dir}/ssurl" /usr/local/bin/ 2>/dev/null || true
+    mv "${tmp_dir}/ssservice" /usr/local/bin/ 2>/dev/null || true
     chmod +x /usr/local/bin/ssserver /usr/local/bin/ssmanager /usr/local/bin/ssurl /usr/local/bin/ssservice 2>/dev/null || true
     
     if [[ ! -x /usr/local/bin/ssserver ]]; then
         echo -e "${RED}ssserver 安装失败或不可执行${NC}"
-        rm -f ss-rust.tar.xz sslocal ssmanager ssurl ssservice 2>/dev/null || true
+        rm -rf "$tmp_dir"
         return 1
     fi
     
-    rm -f ss-rust.tar.xz sslocal ssmanager ssurl ssservice 2>/dev/null || true
+    # 清理临时目录
+    rm -rf "$tmp_dir"
     
     # 创建配置
     mkdir -p "$SS_CONFIG_DIR"
@@ -242,25 +249,31 @@ upgrade_shadowsocks() {
         aarch64|arm64) download_arch="aarch64-unknown-linux-gnu" ;;
     esac
     
-    cd /tmp || return 1
-    if ! wget -q "https://github.com/shadowsocks/shadowsocks-rust/releases/download/${ssrust_version}/shadowsocks-${ssrust_version}.${download_arch}.tar.xz" -O ss-rust.tar.xz; then
+    # 创建安全临时目录
+    local tmp_dir
+    tmp_dir=$(mktemp -d /tmp/simpleproxy-ss.XXXXXX) || return 1
+    chmod 700 "$tmp_dir"
+    
+    local download_file="${tmp_dir}/ss-rust.tar.xz"
+    if ! wget -q "https://github.com/shadowsocks/shadowsocks-rust/releases/download/${ssrust_version}/shadowsocks-${ssrust_version}.${download_arch}.tar.xz" -O "$download_file"; then
         echo -e "${RED}下载 Shadowsocks-rust 失败${NC}"
         rollback_file_if_needed "$bak/ssserver" /usr/local/bin/ssserver
         rollback_file_if_needed "$bak/config.json" "$SS_CONFIG_FILE"
+        rm -rf "$tmp_dir"
         return 1
     fi
     
-    if ! tar -xf ss-rust.tar.xz; then
+    if ! tar -xf "$download_file" -C "$tmp_dir"; then
         echo -e "${RED}解压失败${NC}"
         rollback_file_if_needed "$bak/ssserver" /usr/local/bin/ssserver
         rollback_file_if_needed "$bak/config.json" "$SS_CONFIG_FILE"
-        rm -f ss-rust.tar.xz
+        rm -rf "$tmp_dir"
         return 1
     fi
     
-    mv ssserver /usr/local/bin/
+    mv "${tmp_dir}/ssserver" /usr/local/bin/
     chmod +x /usr/local/bin/ssserver
-    rm -f ss-rust.tar.xz
+    rm -rf "$tmp_dir"
     
     systemctl start "$SS_SERVICE"
     echo -e "${GREEN}Shadowsocks-rust 升级完成!${NC}"

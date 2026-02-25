@@ -16,7 +16,7 @@ init_logging() {
     local log_dir
     log_dir=$(dirname "$LOG_FILE")
     [[ ! -d "$log_dir" ]] && mkdir -p "$log_dir"
-    [[ ! -f "$LOG_FILE" ]] && touch "$LOG_FILE" && chmod 644 "$LOG_FILE"
+    [[ ! -f "$LOG_FILE" ]] && touch "$LOG_FILE" && chmod 640 "$LOG_FILE"
 }
 
 # 日志轮转
@@ -39,7 +39,7 @@ rotate_log_if_needed() {
     done
     mv "$LOG_FILE" "${LOG_FILE}.1"
     touch "$LOG_FILE"
-    chmod 644 "$LOG_FILE"
+    chmod 640 "$LOG_FILE"
 }
 
 # 写入日志

@@ -154,10 +154,10 @@ tls:
 ${hop_config}
 EOF
         
-        # 生成自签名证书
+        # 生成自签名证书 (有效期365天)
         openssl req -x509 -nodes -newkey ec:<(openssl ecparam -name prime256v1) \
             -keyout "${HY2_CONFIG_DIR}/server.key" -out "${HY2_CONFIG_DIR}/server.crt" \
-            -subj "/CN=www.microsoft.com" -days 36500
+            -subj "/CN=www.microsoft.com" -days 365
         
         chmod 644 "${HY2_CONFIG_DIR}/server.crt"
         chmod 600 "${HY2_CONFIG_DIR}/server.key"

@@ -69,29 +69,35 @@ install_snell() {
     
     local download_url="https://github.com/surge-networks/snell/releases/download/v${snell_version}/snell-server-v${snell_version}-linux-${snell_arch}.zip"
     
-    cd /tmp || return 1
+    # 创建安全临时目录
+    local tmp_dir
+    tmp_dir=$(mktemp -d /tmp/simpleproxy-snell.XXXXXX) || return 1
+    chmod 700 "$tmp_dir"
     
-    if ! wget -q --show-progress "$download_url" -O snell-server.zip; then
+    local download_file="${tmp_dir}/snell-server.zip"
+    if ! wget -q --show-progress "$download_url" -O "$download_file"; then
         echo -e "${RED}下载 Snell 失败${NC}"
+        rm -rf "$tmp_dir"
         return 1
     fi
     
-    if ! unzip -o snell-server.zip; then
+    if ! unzip -o "$download_file" -d "$tmp_dir"; then
         echo -e "${RED}解压 Snell 失败${NC}"
-        rm -f snell-server.zip
+        rm -rf "$tmp_dir"
         return 1
     fi
     
-    mv snell-server /usr/local/bin/
+    mv "${tmp_dir}/snell-server" /usr/local/bin/
     chmod +x /usr/local/bin/snell-server
     
     if [[ ! -x /usr/local/bin/snell-server ]]; then
         echo -e "${RED}snell-server 安装失败或不可执行${NC}"
-        rm -f snell-server.zip snell-server
+        rm -rf "$tmp_dir"
         return 1
     fi
     
-    rm -f snell-server.zip snell-server
+    # 清理临时目录
+    rm -rf "$tmp_dir"
     
     # 创建配置目录
     mkdir -p "$SNELL_CONFIG_DIR"
