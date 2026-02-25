@@ -59,8 +59,7 @@ is_systemd() {
 # 获取 OS ID (debian, ubuntu, centos, etc.)
 get_os_id() {
     if [[ -f /etc/os-release ]]; then
-        source /etc/os-release
-        echo "$ID"
+        grep -E '^ID=' /etc/os-release | cut -d= -f2 | tr -d '"'
     else
         echo "unknown"
     fi
@@ -69,8 +68,7 @@ get_os_id() {
 # 获取 OS 版本
 get_os_version() {
     if [[ -f /etc/os-release ]]; then
-        source /etc/os-release
-        echo "$VERSION_ID"
+        grep -E '^VERSION_ID=' /etc/os-release | cut -d= -f2 | tr -d '"'
     else
         echo "unknown"
     fi
@@ -96,7 +94,9 @@ validate_domain() {
     local domain="$1"
     [[ -z "$domain" ]] && return 1
     [[ ${#domain} -gt 253 ]] && return 1
-    echo "$domain" | grep -qE '^[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$'
+    # 检查不允许的模式: 以-开头/结尾, 包含.., 以.开头/结尾
+    [[ "$domain" =~ (^-)|(-$)|(\.\.)|(^\.)(\.?$) ]] && return 1
+    [[ "$domain" =~ ^[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$ ]]
 }
 
 # 验证端口号
@@ -106,13 +106,13 @@ validate_port() {
     [[ "$port" -ge 1 && "$port" -le 65535 ]] || return 1
 }
 
-# 验证密码/密钥 (不允许 shell 元字符)
+# 验证密码/密钥 (只允许 Base64 字符和 =_-)
 validate_key() {
     local key="$1"
     local max_len="${2:-256}"
     [[ -z "$key" ]] && return 1
     [[ ${#key} -gt $max_len ]] && return 1
-    ! echo "$key" | grep -qE '[;|&$`\\<>(){}\[\]!]'
+    [[ "$key" =~ ^[a-zA-Z0-9+/=_-]+$ ]]
 }
 
 # ============================================
@@ -291,17 +291,20 @@ backup_upgrade_context() {
 
 # 标记已安装
 mark_installed() {
+    [[ "$1" =~ ^[a-zA-Z0-9_-]+$ ]] || return 1
     init_directories
     echo "installed_at=$(date -Iseconds)" > "$STATE_DIR/$1.state"
 }
 
 # 标记已卸载
 mark_uninstalled() {
+    [[ "$1" =~ ^[a-zA-Z0-9_-]+$ ]] || return 1
     rm -f "$STATE_DIR/$1.state"
 }
 
 # 检查是否已安装
 is_marked_installed() {
+    [[ "$1" =~ ^[a-zA-Z0-9_-]+$ ]] || return 1
     [[ -f "$STATE_DIR/$1.state" ]]
 }
 
@@ -309,6 +312,7 @@ is_marked_installed() {
 export_json() {
     local name="$1"
     local content="$2"
+    [[ "$name" =~ ^[a-zA-Z0-9_-]+$ ]] || return 1
     init_directories
     printf '%s\n' "$content" > "$EXPORT_DIR/${name}.json"
 }
