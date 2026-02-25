@@ -7,8 +7,14 @@
 
 set -euo pipefail
 
-# 获取脚本目录
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# 获取脚本目录 (处理符号链接情况)
+if [[ -L "${BASH_SOURCE[0]}" ]]; then
+    # 如果是符号链接，获取真实路径
+    SCRIPT_PATH="$(readlink -f "${BASH_SOURCE[0]}")"
+else
+    SCRIPT_PATH="${BASH_SOURCE[0]}"
+fi
+SCRIPT_DIR="$(cd "$(dirname "$SCRIPT_PATH")" && pwd)"
 MODULE_DIR="${SCRIPT_DIR}/lib"
 
 # 加载通用模块
