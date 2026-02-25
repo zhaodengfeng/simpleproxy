@@ -100,7 +100,7 @@ install_hysteria2() {
             hyserver="${hydomain}"
             
             # 申请 SSL 证书
-            if source "${MODULE_DIR}/../simpleproxy.sh" >/dev/null 2>&1 && apply_ssl "$hydomain" 2>/dev/null; then
+            if apply_ssl "$hydomain" 2>/dev/null; then
                 hyinsecure="0"
             else
                 echo -e "${YELLOW}证书申请失败，将使用自签名证书${NC}"
