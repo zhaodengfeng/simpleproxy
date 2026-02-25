@@ -1,0 +1,6 @@
+# SimpleProxy SHA256 Checksums
+# 更新日期: 2026-02-25
+# 格式: 文件名 校验值
+# 
+# 注意: 这些是示例值，实际使用前需要重新计算
+# sha256sum simpleproxy.sh >> checksums.txt
