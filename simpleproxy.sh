@@ -403,8 +403,14 @@ input_domain() {
     echo -e "${YELLOW}==== 域名配置 ====${NC}"
     read -p "请输入已解析到本机的域名: " DOMAIN
     
+    # Security: Validate domain format
     if [ -z "$DOMAIN" ]; then
         echo -e "${RED}错误: 域名不能为空${NC}"
+        return 1
+    fi
+    
+    if ! validate_domain "$DOMAIN"; then
+        echo -e "${RED}错误: 域名格式无效，请使用有效的域名 (例如: example.com)${NC}"
         return 1
     fi
     
@@ -426,7 +432,7 @@ input_domain() {
         echo "$isPort"
         read -p "是否继续? (y/n): " confirm
         if [[ ! "$confirm" =~ ^[Yy]$ ]]; then
-            exit 1
+            return 1
         fi
     fi
     
@@ -508,8 +514,9 @@ apply_ssl() {
     
     # Fix certificate permissions for Xray and other services
     echo -e "${BLUE}设置证书权限...${NC}"
-    chmod 755 /etc/letsencrypt/live
-    chmod 755 /etc/letsencrypt/archive 2>/dev/null || true
+    # Security: Use restrictive permissions for certificate directories
+    chmod 700 /etc/letsencrypt/live
+    chmod 700 /etc/letsencrypt/archive 2>/dev/null || true
     chmod 644 /etc/letsencrypt/live/$domain/fullchain.pem
     chmod 600 /etc/letsencrypt/live/$domain/privkey.pem
     
@@ -676,7 +683,8 @@ install_ssrust() {
     mv ssmanager /usr/local/bin/ 2>/dev/null || true
     mv ssurl /usr/local/bin/ 2>/dev/null || true
     mv ssservice /usr/local/bin/ 2>/dev/null || true
-    chmod +x /usr/local/bin/ssserver
+    # Security: Ensure all binaries have execute permission
+    chmod +x /usr/local/bin/ssserver /usr/local/bin/ssmanager /usr/local/bin/ssurl /usr/local/bin/ssservice 2>/dev/null || true
     if [ ! -x /usr/local/bin/ssserver ]; then
         echo -e "${RED}ssserver 安装失败或不可执行${NC}"
         rm -f ss-rust.tar.xz sslocal ssmanager ssurl ssservice 2>/dev/null || true
