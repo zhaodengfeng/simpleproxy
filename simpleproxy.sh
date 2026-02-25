@@ -32,11 +32,11 @@ gen_uuid() {
     # Validate UUID format (should be 36 chars with 4 dashes)
     if [ -z "$uuid" ] || [ ${#uuid} -ne 36 ] || ! echo "$uuid" | grep -qE '^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'; then
         # Fallback: manually generate UUID v4
-        uuid=$(tr -dc 'a-f0-9' < /dev/urandom | head -c 8)
-        uuid="${uuid}-$(tr -dc 'a-f0-9' < /dev/urandom | head -c 4)"
-        uuid="${uuid}-4$(tr -dc 'a-f0-9' < /dev/urandom | head -c 3)"
-        uuid="${uuid}-$(tr -dc '89ab' < /dev/urandom | head -c 1)$(tr -dc 'a-f0-9' < /dev/urandom | head -c 3)"
-        uuid="${uuid}-$(tr -dc 'a-f0-9' < /dev/urandom | head -c 12)"
+        local uuid=$(tr -dc 'a-f0-9' < /dev/urandom | head -c 8)
+        local uuid="${uuid}-$(tr -dc 'a-f0-9' < /dev/urandom | head -c 4)"
+        local uuid="${uuid}-4$(tr -dc 'a-f0-9' < /dev/urandom | head -c 3)"
+        local uuid="${uuid}-$(tr -dc '89ab' < /dev/urandom | head -c 1)$(tr -dc 'a-f0-9' < /dev/urandom | head -c 3)"
+        local uuid="${uuid}-$(tr -dc 'a-f0-9' < /dev/urandom | head -c 12)"
     fi
     echo -n "$uuid"
 }
@@ -54,19 +54,19 @@ getIP() {
     local serverIP=""
 
     # Primary source (Cloudflare trace)
-    serverIP=$(curl -s --max-time 6 https://www.cloudflare.com/cdn-cgi/trace 2>/dev/null | awk -F= '/^ip=/{print $2}' | tr -d '\r\n')
+    local serverIP=$(curl -s --max-time 6 https://www.cloudflare.com/cdn-cgi/trace 2>/dev/null | awk -F= '/^ip=/{print $2}' | tr -d '\r\n')
 
     # Fallback sources
     if [[ -z "${serverIP}" ]]; then
-        serverIP=$(curl -s --max-time 6 https://ifconfig.co/ip 2>/dev/null | tr -d '\r\n')
+        local serverIP=$(curl -s --max-time 6 https://ifconfig.co/ip 2>/dev/null | tr -d '\r\n')
     fi
     if [[ -z "${serverIP}" ]]; then
-        serverIP=$(curl -s --max-time 6 https://api.ipify.org 2>/dev/null | tr -d '\r\n')
+        local serverIP=$(curl -s --max-time 6 https://api.ipify.org 2>/dev/null | tr -d '\r\n')
     fi
 
     # Basic IPv4/IPv6 validation
     if ! echo "${serverIP}" | grep -qE '^([0-9]{1,3}\.){3}[0-9]{1,3}$|^([0-9a-fA-F:]+:+)+[0-9a-fA-F]+$'; then
-        serverIP=""
+        local serverIP=""
     fi
 
     echo "${serverIP}"
@@ -122,7 +122,7 @@ export_json() {
 backup_upgrade_context() {
     local name="$1"
     local ts
-    ts=$(date +%Y%m%d%H%M%S)
+    local ts=$(date +%Y%m%d%H%M%S)
     local dir="$BACKUP_ROOT/${name}-${ts}"
     mkdir -p "$dir"
     echo "$dir"
@@ -139,18 +139,18 @@ ensure_xray_service_unit() {
     local cfg="$2"
     cat > "/etc/systemd/system/${svc}.service" <<EOF
 [Unit]
-Description=Xray Service (${svc})
-After=network.target nss-lookup.target
+local Description=Xray Service (${svc})
+local After=network.target nss-lookup.target
 
 [Service]
-Type=simple
-ExecStart=/usr/local/bin/xray run -config ${cfg}
-Restart=on-failure
-RestartSec=3
-LimitNOFILE=1048576
+local Type=simple
+local ExecStart=/usr/local/bin/xray run -config ${cfg}
+local Restart=on-failure
+local RestartSec=3
+local LimitNOFILE=1048576
 
 [Install]
-WantedBy=multi-user.target
+local WantedBy=multi-user.target
 EOF
     systemctl daemon-reload
 }
@@ -162,7 +162,7 @@ rotate_log_if_needed() {
     [ -f "$LOG_FILE" ] || return 0
 
     local size
-    size=$(stat -c%s "$LOG_FILE" 2>/dev/null || echo 0)
+    local size=$(stat -c%s "$LOG_FILE" 2>/dev/null || echo 0)
     [ "$size" -lt "$max_size" ] && return 0
 
     local i
@@ -233,12 +233,12 @@ health_check() {
         for crt in /etc/letsencrypt/live/*/fullchain.pem; do
             [ -f "$crt" ] || continue
             local d
-            d=$(basename "$(dirname "$crt")")
+            local d=$(basename "$(dirname "$crt")")
             local end epoch now days
-            end=$(openssl x509 -in "$crt" -noout -enddate 2>/dev/null | cut -d= -f2)
-            epoch=$(date -d "$end" +%s 2>/dev/null)
-            now=$(date +%s)
-            days=$(( (epoch-now)/86400 ))
+            local end=$(openssl x509 -in "$crt" -noout -enddate 2>/dev/null | cut -d= -f2)
+            local epoch=$(date -d "$end" +%s 2>/dev/null)
+            local now=$(date +%s)
+            local days=$(( (epoch-now)/86400 ))
             echo "- $d: 剩余 ${days} 天"
         done
     fi
@@ -284,7 +284,7 @@ run_remote_script() {
     shift
 
     local tmp_script
-    tmp_script=$(mktemp /tmp/simpleproxy-remote.XXXXXX.sh) || return 1
+    local tmp_script=$(mktemp /tmp/simpleproxy-remote.XXXXXX.sh) || return 1
 
     if ! curl -fL --proto '=https' --tlsv1.2 --retry 3 --retry-delay 1 "$script_url" -o "$tmp_script"; then
         echo -e "${RED}下载远程脚本失败: ${script_url}${NC}"
@@ -313,7 +313,7 @@ run_remote_script() {
 install_acme() {
     if [ ! -f "$HOME/.acme.sh/acme.sh" ]; then
         echo -e "${BLUE}Installing acme.sh...${NC}"
-        curl -fsSL --proto '=https' --tlsv1.2 https://get.acme.sh | sh -s email=admin@localhost.com
+        curl -fsSL --proto '=https' --tlsv1.2 --proto '=https' --tlsv1.2 https://get.acme.sh | sh -s email=admin@localhost.com
         # Set Let's Encrypt as default CA (not ZeroSSL)
         ~/.acme.sh/acme.sh --set-default-ca --server letsencrypt
     fi
@@ -333,17 +333,17 @@ input_domain() {
     
     read -t 15 -p "请输入端口(回车或等待15秒默认为443): " GET_PORT
     if [ -z "$GET_PORT" ]; then
-        GET_PORT=443
+        local GET_PORT=443
     fi
     
     # Check if port is valid
     if ! [[ "$GET_PORT" =~ ^[0-9]+$ ]] || [ "$GET_PORT" -lt 1 ] || [ "$GET_PORT" -gt 65535 ]; then
         echo -e "${RED}错误: 端口无效，使用默认端口443${NC}"
-        GET_PORT=443
+        local GET_PORT=443
     fi
     
     # Check if ports 80 and target port are available
-    isPort=$(netstat -ntlp 2>/dev/null | grep -E ':80 |:'"$GET_PORT"' ')
+    local isPort=$(netstat -ntlp 2>/dev/null | grep -E ':80 |:'"$GET_PORT"' ')
     if [ -n "$isPort" ]; then
         echo -e "${YELLOW}警告: 80或${GET_PORT}端口被占用${NC}"
         echo "$isPort"
@@ -524,36 +524,36 @@ install_ssrust() {
     local sspass=""
     case "$ss_method_choice" in
         1|"") 
-            smethod="2022-blake3-aes-128-gcm"
+            local smethod="2022-blake3-aes-128-gcm"
             # 16 bytes = 24 base64 chars
-            sspass=$(dd if=/dev/urandom bs=16 count=1 2>/dev/null | base64 -w 0)
+            local sspass=$(dd if=/dev/urandom bs=16 count=1 2>/dev/null | base64 -w 0)
             ;;
         2) 
-            smethod="2022-blake3-aes-256-gcm"
+            local smethod="2022-blake3-aes-256-gcm"
             # 32 bytes = 44 base64 chars
-            sspass=$(dd if=/dev/urandom bs=32 count=1 2>/dev/null | base64 -w 0)
+            local sspass=$(dd if=/dev/urandom bs=32 count=1 2>/dev/null | base64 -w 0)
             ;;
         3) 
-            smethod="2022-blake3-chacha20-poly1305"
+            local smethod="2022-blake3-chacha20-poly1305"
             # 32 bytes = 44 base64 chars
-            sspass=$(dd if=/dev/urandom bs=32 count=1 2>/dev/null | base64 -w 0)
+            local sspass=$(dd if=/dev/urandom bs=32 count=1 2>/dev/null | base64 -w 0)
             ;;
         4) 
-            smethod="aes-256-gcm"
-            sspass=$(gen_random 16)
+            local smethod="aes-256-gcm"
+            local sspass=$(gen_random 16)
             ;;
         5) 
-            smethod="aes-128-gcm"
-            sspass=$(gen_random 16)
+            local smethod="aes-128-gcm"
+            local sspass=$(gen_random 16)
             ;;
         6) 
-            smethod="chacha20-ietf-poly1305"
-            sspass=$(gen_random 16)
+            local smethod="chacha20-ietf-poly1305"
+            local sspass=$(gen_random 16)
             ;;
         *) 
             echo -e "${YELLOW}无效选项，使用默认 2022-blake3-aes-128-gcm${NC}"
-            smethod="2022-blake3-aes-128-gcm"
-            sspass=$(dd if=/dev/urandom bs=16 count=1 2>/dev/null | base64 -w 0)
+            local smethod="2022-blake3-aes-128-gcm"
+            local sspass=$(dd if=/dev/urandom bs=16 count=1 2>/dev/null | base64 -w 0)
             ;;
     esac
     
@@ -563,7 +563,7 @@ install_ssrust() {
     echo -e "${BLUE}获取 Shadowsocks-rust 最新版本...${NC}"
     local ssrust_version=$(curl -sIL "https://github.com/shadowsocks/shadowsocks-rust/releases/latest" | grep -i location | sed -E 's/.*tag\/(v[0-9.]+).*/\1/')
     if [ -z "$ssrust_version" ]; then
-        ssrust_version="v1.24.0"
+        local ssrust_version="v1.24.0"
         echo -e "${YELLOW}获取版本失败，使用默认版本 ${ssrust_version}${NC}"
     else
         echo -e "${GREEN}最新版本: ${ssrust_version}${NC}"
@@ -703,14 +703,14 @@ EOF
 upgrade_ssrust() {
     echo -e "${BLUE}Upgrading Shadowsocks-rust...${NC}"
     local bak
-    bak=$(backup_upgrade_context "ssrust")
+    local bak=$(backup_upgrade_context "ssrust")
     cp -f /etc/shadowsocks/config.json "$bak/config.json" 2>/dev/null || true
     cp -f /usr/local/bin/ssserver "$bak/ssserver" 2>/dev/null || true
     systemctl stop shadowsocks.service
     
     local ssrust_version=$(curl -sIL "https://github.com/shadowsocks/shadowsocks-rust/releases/latest" | grep -i location | sed -E 's/.*tag\/(v[0-9.]+).*/\1/')
     if [ -z "$ssrust_version" ]; then
-        ssrust_version="v1.24.0"
+        local ssrust_version="v1.24.0"
     fi
     
     local arch=$(uname -m)
@@ -805,7 +805,7 @@ install_reality() {
             echo -e "${BLUE}为域名 ${rdomain} 申请证书...${NC}"
             apply_ssl "$rdomain" || {
                 echo -e "${YELLOW}证书申请失败，将使用Reality模式${NC}"
-                rdomain=""
+                local rdomain=""
             }
         fi
     fi
@@ -1081,7 +1081,7 @@ EOF
 upgrade_reality() {
     echo -e "${BLUE}Upgrading Reality(Xray)...${NC}"
     local bak
-    bak=$(backup_upgrade_context "reality")
+    local bak=$(backup_upgrade_context "reality")
     cp -f /usr/local/etc/xray/reality.json "$bak/reality.json" 2>/dev/null || true
     run_remote_script "https://github.com/XTLS/Xray-install/raw/main/install-release.sh" @ install || {
         rollback_file_if_needed "$bak/reality.json" /usr/local/etc/xray/reality.json
@@ -1146,7 +1146,7 @@ install_hy2() {
         return 1
     fi
     local hysteria_bin
-    hysteria_bin=$(command -v hysteria)
+    local hysteria_bin=$(command -v hysteria)
     echo -e "${GREEN}hysteria 版本: $(hysteria version 2>/dev/null | head -1)${NC}"
 
     mkdir -p /etc/hysteria
@@ -1164,25 +1164,25 @@ install_hy2() {
         # Ask for hop start port
         read -t 15 -p "请输入起始端口 (默认: $((hyport+1))): " hop_start_input
         if [ -n "$hop_start_input" ]; then
-            hop_start=$hop_start_input
+            local hop_start=$hop_start_input
         else
-            hop_start=$((hyport+1))
+            local hop_start=$((hyport+1))
         fi
         
         # Ask for hop end port
         read -t 15 -p "请输入结束端口 (默认: $((hyport+100))): " hop_end_input
         if [ -n "$hop_end_input" ]; then
-            hop_end=$hop_end_input
+            local hop_end=$hop_end_input
         else
-            hop_end=$((hyport+100))
+            local hop_end=$((hyport+100))
         fi
         
         # Ask for hop interval
         read -t 15 -p "请输入跳跃间隔秒数 (默认: 30): " hop_interval_input
         if [ -n "$hop_interval_input" ]; then
-            hop_interval=$hop_interval_input
+            local hop_interval=$hop_interval_input
         else
-            hop_interval="30"
+            local hop_interval="30"
         fi
         
         echo -e "${GREEN}端口跳跃: ${hop_start}-${hop_end}, 间隔 ${hop_interval} 秒${NC}"
@@ -1212,11 +1212,11 @@ install_hy2() {
     if [[ "$use_domain" =~ ^[Yy]$ ]]; then
         read -p "请输入已解析到本机的域名: " hydomain
         if [ -n "$hydomain" ]; then
-            hyserver="${hydomain}"
+            local hyserver="${hydomain}"
             
             # Apply for SSL certificate
             apply_ssl "$hydomain" && {
-                hyinsecure="0"
+                local hyinsecure="0"
                 
                 # Setup auto-renewal
                 setup_cert_renewal "$hydomain"
@@ -1224,7 +1224,7 @@ install_hy2() {
                 # Generate config with optional port hopping
             local listen_line="listen: :${hyport}"
             if [ -n "$hop_start" ] && [ -n "$hop_end" ]; then
-                listen_line="listen: :${hyport},:${hop_start}-${hop_end}"
+                local listen_line="listen: :${hyport},:${hop_start}-${hop_end}"
             fi
             
             cat > /etc/hysteria/config.yaml <<EOF
@@ -1249,7 +1249,7 @@ hopInterval: ${hop_interval}s
 EOF
             } || {
                 echo -e "${YELLOW}证书申请失败，将使用自签名证书${NC}"
-                hyinsecure="1"
+                local hyinsecure="1"
             }
         fi
     fi
@@ -1380,7 +1380,7 @@ EOF
 upgrade_hy2() {
     echo -e "${BLUE}Upgrading Hysteria2...${NC}"
     local bak
-    bak=$(backup_upgrade_context "hysteria2")
+    local bak=$(backup_upgrade_context "hysteria2")
     cp -f /etc/hysteria/config.yaml "$bak/config.yaml" 2>/dev/null || true
     cp -f "$(command -v hysteria)" "$bak/hysteria" 2>/dev/null || true
     systemctl stop hysteria-server.service
@@ -1417,7 +1417,7 @@ install_v2ray_ws() {
     
     # Ask if user wants WebSocket support
     read -p "是否启用 WebSocket 支持? (y/n, 默认y): " use_ws
-    use_ws=${use_ws:-y}
+    local use_ws=${use_ws:-y}
     
     local vport=$(shuf -i 20000-65000 -n 1)
     local vuuid=$(gen_uuid)
@@ -1426,7 +1426,7 @@ install_v2ray_ws() {
     
     # Use port 443 if no WebSocket, otherwise random port behind nginx
     if [[ "$use_ws" =~ ^[Nn]$ ]]; then
-        vport=$GET_PORT
+        local vport=$GET_PORT
         local use_nginx=false
     else
         local use_nginx=true
@@ -1665,7 +1665,7 @@ EOF
 upgrade_v2ray_ws() {
     echo -e "${BLUE}Upgrading V2Ray(Xray)...${NC}"
     local bak
-    bak=$(backup_upgrade_context "v2ray")
+    local bak=$(backup_upgrade_context "v2ray")
     cp -f /usr/local/etc/xray/v2ray.json "$bak/v2ray.json" 2>/dev/null || true
     cp -f /etc/nginx/conf.d/simpleproxy.conf "$bak/simpleproxy.conf" 2>/dev/null || true
     run_remote_script "https://github.com/XTLS/Xray-install/raw/main/install-release.sh" @ install || {
@@ -1761,10 +1761,10 @@ install_snell() {
     echo -e "${BLUE}获取 Snell 最新版本...${NC}"
     local snell_version=$(curl -s "https://kb.nssurge.com/surge-knowledge-base/zh/release-notes/snell" 2>/dev/null | grep -oE "snell-server-v[0-9]+\.[0-9]+\.[0-9]+" | head -1 | sed 's/snell-server-v//')
     if [ -z "$snell_version" ]; then
-        snell_version="v5.0.1"
+        local snell_version="v5.0.1"
         echo -e "${YELLOW}获取版本失败，使用默认版本 ${snell_version}${NC}"
     else
-        snell_version="v${snell_version}"
+        local snell_version="v${snell_version}"
         echo -e "${GREEN}最新版本: ${snell_version}${NC}"
     fi
     
@@ -1814,17 +1814,17 @@ EOF
     # Create systemd service
     cat > /etc/systemd/system/snell.service <<EOF
 [Unit]
-Description=Snell Proxy Server
-After=network.target
+local Description=Snell Proxy Server
+local After=network.target
 
 [Service]
-Type=simple
-ExecStart=/usr/local/bin/snell-server -c /etc/snell/snell-server.conf
-Restart=on-failure
-RestartSec=5s
+local Type=simple
+local ExecStart=/usr/local/bin/snell-server -c /etc/snell/snell-server.conf
+local Restart=on-failure
+local RestartSec=5s
 
 [Install]
-WantedBy=multi-user.target
+local WantedBy=multi-user.target
 EOF
     
     systemctl daemon-reload
@@ -1874,7 +1874,7 @@ EOF
 upgrade_snell() {
     echo -e "${BLUE}Upgrading Snell...${NC}"
     local bak
-    bak=$(backup_upgrade_context "snell")
+    local bak=$(backup_upgrade_context "snell")
     cp -f /etc/snell/snell-server.conf "$bak/snell-server.conf" 2>/dev/null || true
     cp -f /usr/local/bin/snell-server "$bak/snell-server" 2>/dev/null || true
     systemctl stop snell.service
@@ -1895,11 +1895,11 @@ upgrade_snell() {
     
     # Default to v5 if version detection fails
     if [ -z "$snell_version" ]; then
-        snell_version="5.0.1"
+        local snell_version="5.0.1"
         echo -e "${YELLOW}获取版本失败，使用默认版本 v${snell_version}${NC}"
     fi
     if [ -z "$snell_version" ]; then
-        snell_version="5.0.1"
+        local snell_version="5.0.1"
     fi
     
     cd /tmp
@@ -2035,35 +2035,35 @@ show_configs() {
         echo ""
         echo -e "${BLUE}--- Shadowsocks-rust ---${NC}"
         cat /etc/shadowsocks/client.json
-        has_config=true
+        local has_config=true
     fi
     
     if [ -f /usr/local/etc/xray/reclient.json ]; then
         echo ""
         echo -e "${BLUE}--- Reality ---${NC}"
         cat /usr/local/etc/xray/reclient.json
-        has_config=true
+        local has_config=true
     fi
     
     if [ -f /etc/hysteria/hyclient.json ]; then
         echo ""
         echo -e "${BLUE}--- Hysteria2 ---${NC}"
         cat /etc/hysteria/hyclient.json
-        has_config=true
+        local has_config=true
     fi
     
     if [ -f /usr/local/etc/xray/v2client.json ]; then
         echo ""
         echo -e "${BLUE}--- V2Ray+TLS+WS ---${NC}"
         cat /usr/local/etc/xray/v2client.json
-        has_config=true
+        local has_config=true
     fi
     
     if [ -f /etc/snell/client.json ]; then
         echo ""
         echo -e "${BLUE}--- Snell ---${NC}"
         cat /etc/snell/client.json
-        has_config=true
+        local has_config=true
     fi
     
     if [ "$has_config" = false ]; then
