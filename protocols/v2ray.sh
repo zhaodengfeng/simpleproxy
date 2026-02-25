@@ -76,7 +76,7 @@ install_v2ray() {
     fi
     
     # 申请 SSL 证书
-    if ! source "${MODULE_DIR}/../simpleproxy.sh" >/dev/null 2>&1 || ! apply_ssl "$DOMAIN"; then
+    if ! apply_ssl "$DOMAIN"; then
         echo -e "${RED}SSL 证书申请失败${NC}"
         return 1
     fi

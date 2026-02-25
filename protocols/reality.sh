@@ -58,7 +58,7 @@ install_reality() {
         read -p "请输入已解析到本机的域名: " rdomain
         if [[ -n "$rdomain" ]]; then
             echo -e "${BLUE}为域名 ${rdomain} 申请证书...${NC}"
-            if ! source "${MODULE_DIR}/../simpleproxy.sh" &>/dev/null || ! apply_ssl "$rdomain"; then
+            if ! apply_ssl "$rdomain"; then
                 echo -e "${YELLOW}证书申请失败，将使用Reality模式${NC}"
                 rdomain=""
             fi
