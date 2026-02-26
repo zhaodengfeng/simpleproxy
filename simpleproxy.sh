@@ -161,6 +161,7 @@ show_menu() {
     echo "    7. 查看状态"
     echo "    8. 健康检查"
     echo "    9. 完全卸载"
+    echo "   10. 配置 AI 分流 (SS 上游)"
     echo ""
     echo "    0. 退出"
     echo ""
@@ -220,6 +221,177 @@ handle_status() {
     call_protocol v2ray status 2>/dev/null || true
     echo ""
     call_protocol snell status 2>/dev/null || true
+}
+
+# ============================================
+# AI 分流（仅 SS 上游）
+# ============================================
+
+AI_RULE_DIR="/usr/local/etc/xray/rules"
+AI_DOMAIN_FILE="${AI_RULE_DIR}/ai_domains.txt"
+AI_UPSTREAM_FILE="${STATE_DIR}/ai-upstream-ss.env"
+
+update_ai_rules() {
+    mkdir -p "$AI_RULE_DIR"
+    local tmp1 tmp2
+    tmp1=$(mktemp /tmp/simpleproxy-ai1.XXXXXX) || return 1
+    tmp2=$(mktemp /tmp/simpleproxy-ai2.XXXXXX) || { rm -f "$tmp1"; return 1; }
+
+    if ! curl -fsSL "https://raw.githubusercontent.com/ACL4SSR/ACL4SSR/master/Clash/Ruleset/AI.list" -o "$tmp1"; then
+        echo -e "${RED}下载 AI.list 失败${NC}"
+        rm -f "$tmp1" "$tmp2"
+        return 1
+    fi
+
+    if ! curl -fsSL "https://raw.githubusercontent.com/ACL4SSR/ACL4SSR/master/Clash/Ruleset/OpenAi.list" -o "$tmp2"; then
+        echo -e "${RED}下载 OpenAi.list 失败${NC}"
+        rm -f "$tmp1" "$tmp2"
+        return 1
+    fi
+
+    cat "$tmp1" "$tmp2" | awk -F, '
+        /^[[:space:]]*#/ {next}
+        NF < 2 {next}
+        {
+          gsub(/[[:space:]]+/, "", $0)
+          type=toupper($1)
+          val=$2
+          if (val=="") next
+          if (type=="DOMAIN-SUFFIX") print "domain:" val
+          else if (type=="DOMAIN") print "full:" val
+          else if (type=="DOMAIN-KEYWORD") print "keyword:" val
+        }
+    ' | sort -u > "$AI_DOMAIN_FILE"
+
+    rm -f "$tmp1" "$tmp2"
+
+    if [[ ! -s "$AI_DOMAIN_FILE" ]]; then
+        echo -e "${RED}AI 规则为空，已中止${NC}"
+        return 1
+    fi
+
+    echo -e "${GREEN}AI 规则已更新: ${AI_DOMAIN_FILE} ($(wc -l < "$AI_DOMAIN_FILE") 条)${NC}"
+    return 0
+}
+
+configure_ai_upstream_ss() {
+    echo ""
+    echo -e "${YELLOW}=== AI 分流上游（仅支持 SS） ===${NC}"
+    read -p "上游 SS 服务器地址/IP: " AI_SS_SERVER
+    read -p "上游 SS 端口: " AI_SS_PORT
+    read -p "上游 SS 密码: " AI_SS_PASSWORD
+    echo "请选择 SS 加密方式:"
+    echo "  1. aes-128-gcm"
+    echo "  2. aes-256-gcm"
+    echo "  3. chacha20-ietf-poly1305"
+    echo "  4. 2022-blake3-aes-128-gcm"
+    echo "  5. 2022-blake3-aes-256-gcm"
+    read -p "输入数字(默认 2): " ai_method_choice
+
+    local AI_SS_METHOD="aes-256-gcm"
+    case "${ai_method_choice:-2}" in
+        1) AI_SS_METHOD="aes-128-gcm" ;;
+        2) AI_SS_METHOD="aes-256-gcm" ;;
+        3) AI_SS_METHOD="chacha20-ietf-poly1305" ;;
+        4) AI_SS_METHOD="2022-blake3-aes-128-gcm" ;;
+        5) AI_SS_METHOD="2022-blake3-aes-256-gcm" ;;
+        *) AI_SS_METHOD="aes-256-gcm" ;;
+    esac
+
+    if [[ -z "$AI_SS_SERVER" || -z "$AI_SS_PORT" || -z "$AI_SS_PASSWORD" ]]; then
+        echo -e "${RED}上游信息不完整${NC}"
+        return 1
+    fi
+    if ! validate_port "$AI_SS_PORT"; then
+        echo -e "${RED}端口无效${NC}"
+        return 1
+    fi
+
+    mkdir -p "$STATE_DIR"
+    cat > "$AI_UPSTREAM_FILE" <<EOF
+AI_SS_SERVER=${AI_SS_SERVER}
+AI_SS_PORT=${AI_SS_PORT}
+AI_SS_METHOD=${AI_SS_METHOD}
+AI_SS_PASSWORD=${AI_SS_PASSWORD}
+EOF
+    chmod 600 "$AI_UPSTREAM_FILE"
+    echo -e "${GREEN}AI 上游 SS 配置已保存${NC}"
+    return 0
+}
+
+apply_ai_shunt_to_config() {
+    local cfg="$1"
+    [[ -f "$cfg" ]] || return 1
+    [[ -f "$AI_UPSTREAM_FILE" ]] || { echo -e "${RED}未找到上游配置: ${AI_UPSTREAM_FILE}${NC}"; return 1; }
+    [[ -f "$AI_DOMAIN_FILE" ]] || { echo -e "${RED}未找到 AI 规则文件: ${AI_DOMAIN_FILE}${NC}"; return 1; }
+
+    set -a
+    source "$AI_UPSTREAM_FILE"
+    set +a
+
+    python3 - "$cfg" "$AI_DOMAIN_FILE" "$AI_SS_SERVER" "$AI_SS_PORT" "$AI_SS_METHOD" "$AI_SS_PASSWORD" <<'PY'
+import json,sys
+cfg,rulef,server,port,method,password=sys.argv[1:7]
+port=int(port)
+with open(cfg,'r',encoding='utf-8') as f:
+    data=json.load(f)
+with open(rulef,'r',encoding='utf-8') as f:
+    domains=[line.strip() for line in f if line.strip()]
+
+outbounds=data.setdefault('outbounds',[])
+outbounds=[o for o in outbounds if o.get('tag')!='ai-ss-out']
+outbounds.append({
+  'protocol':'shadowsocks',
+  'tag':'ai-ss-out',
+  'settings':{'servers':[{'address':server,'port':port,'method':method,'password':password}]}
+})
+data['outbounds']=outbounds
+
+routing=data.setdefault('routing',{})
+rules=routing.setdefault('rules',[])
+rules=[r for r in rules if r.get('outboundTag')!='ai-ss-out']
+if domains:
+    rules.append({'type':'field','domain':domains,'outboundTag':'ai-ss-out'})
+routing['rules']=rules
+routing.setdefault('domainStrategy','AsIs')
+
+with open(cfg,'w',encoding='utf-8') as f:
+    json.dump(data,f,ensure_ascii=False,indent=2)
+PY
+}
+
+apply_ai_shunt() {
+    update_ai_rules || return 1
+    configure_ai_upstream_ss || return 1
+
+    local changed=0
+    if [[ -f /usr/local/etc/xray/reality.json ]]; then
+        apply_ai_shunt_to_config /usr/local/etc/xray/reality.json && changed=1
+        if xray -test -config /usr/local/etc/xray/reality.json >/dev/null 2>&1; then
+            systemctl restart xray-reality.service 2>/dev/null || true
+        else
+            echo -e "${RED}Reality 配置校验失败，未生效${NC}"
+            return 1
+        fi
+    fi
+
+    if [[ -f /usr/local/etc/xray/v2ray.json ]]; then
+        apply_ai_shunt_to_config /usr/local/etc/xray/v2ray.json && changed=1
+        if xray -test -config /usr/local/etc/xray/v2ray.json >/dev/null 2>&1; then
+            systemctl restart xray-v2ray.service 2>/dev/null || true
+        else
+            echo -e "${RED}V2Ray 配置校验失败，未生效${NC}"
+            return 1
+        fi
+    fi
+
+    if [[ $changed -eq 0 ]]; then
+        echo -e "${YELLOW}未检测到 Reality/V2Ray 配置文件，未应用分流${NC}"
+        return 1
+    fi
+
+    echo -e "${GREEN}AI 分流已生效（命中 AI/OpenAI 规则走 SS 上游）${NC}"
+    return 0
 }
 
 # ============================================
@@ -358,6 +530,11 @@ main() {
                     rm -rf "$STATE_DIR" "$EXPORT_DIR" "$BACKUP_ROOT"
                     echo -e "${GREEN}已完全卸载${NC}"
                 fi
+                echo ""
+                read -p "按回车键继续..."
+                ;;
+            10)
+                apply_ai_shunt || true
                 echo ""
                 read -p "按回车键继续..."
                 ;;
