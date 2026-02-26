@@ -70,6 +70,7 @@ install_reality() {
         echo -e "${BLUE}正在安装 Xray...${NC}"
         run_remote_script "https://github.com/XTLS/Xray-install/raw/main/install-release.sh" install || return 1
         xray_installed=true
+        echo -e "${YELLOW}提示: 如果上游安装器显示 'Failed to enable and start the Xray service'，通常是默认 xray.service 启动提示，不影响本脚本后续使用的 xray-reality.service。${NC}"
     fi
     
     export PATH="/usr/local/bin:$PATH"
@@ -300,6 +301,7 @@ upgrade_reality() {
         rollback_file_if_needed "$bak/reality.json" "$REALITY_CONFIG"
         return 1
     }
+    echo -e "${YELLOW}提示: 若看到上游安装器的 xray.service 启动失败提示，可忽略；本脚本使用的是 ${REALITY_SERVICE}。${NC}"
     
     systemctl restart "$REALITY_SERVICE" || {
         rollback_file_if_needed "$bak/reality.json" "$REALITY_CONFIG"
