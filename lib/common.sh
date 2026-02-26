@@ -422,8 +422,8 @@ run_remote_script() {
     if [[ "${ALLOW_REMOTE_SCRIPT:-0}" != "1" ]]; then
         echo -e "${YELLOW}安全确认: 即将下载并执行远程脚本(高风险操作)${NC}"
         echo -e "URL: ${script_url}"
-        read -r -p "请输入 YES 继续，其他任意输入取消: " confirm_remote
-        if [[ "$confirm_remote" != "YES" ]]; then
+        read -r -p "请输入 y 继续（大小写均可），其他任意输入取消: " confirm_remote
+        if [[ ! "$confirm_remote" =~ ^[Yy]$ ]]; then
             echo -e "${YELLOW}已取消远程脚本执行${NC}"
             return 1
         fi
