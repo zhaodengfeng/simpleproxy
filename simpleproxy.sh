@@ -287,12 +287,41 @@ self_test() {
 }
 
 # ============================================
+# 版本提示
+# ============================================
+
+check_version_hint() {
+    # 仅在 git 仓库中做轻量检查，失败不影响主流程
+    if ! command -v git >/dev/null 2>&1; then
+        return 0
+    fi
+
+    if [[ ! -d "${SCRIPT_DIR}/.git" ]]; then
+        return 0
+    fi
+
+    local local_rev remote_rev
+    local_rev=$(git -C "$SCRIPT_DIR" rev-parse --short HEAD 2>/dev/null || true)
+
+    # 轻量拉取远端信息（失败则静默跳过）
+    git -C "$SCRIPT_DIR" fetch origin main --quiet 2>/dev/null || return 0
+    remote_rev=$(git -C "$SCRIPT_DIR" rev-parse --short origin/main 2>/dev/null || true)
+
+    if [[ -n "$local_rev" && -n "$remote_rev" && "$local_rev" != "$remote_rev" ]]; then
+        echo -e "${YELLOW}检测到新版本可用: 本地 ${local_rev} -> 远端 ${remote_rev}${NC}"
+        echo -e "${YELLOW}建议先执行: cd ${SCRIPT_DIR} && git pull${NC}"
+        echo ""
+    fi
+}
+
+# ============================================
 # 主程序
 # ============================================
 
 main() {
     check_root
     init_directories
+    check_version_hint || true
     
     while true; do
         show_menu
