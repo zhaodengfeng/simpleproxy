@@ -92,7 +92,7 @@ call_protocol() {
         return 1
     fi
     
-    MODULE_DIR="$MODULE_DIR" bash "$script" "${action}_${protocol}"
+    bash "$script" "${action}_${protocol}"
 }
 
 # ============================================
@@ -149,14 +149,14 @@ show_menu() {
     echo -e "${GREEN}        SimpleProxy 管理脚本 v${SCRIPT_VERSION}${NC}"
     echo -e "${GREEN}═══════════════════════════════════════════${NC}"
     echo ""
-    echo "  ${BLUE}[安装选项]${NC}"
+    echo -e "  ${BLUE}[安装选项]${NC}"
     echo "    1. Shadowsocks-rust"
     echo "    2. Reality (VLESS)"
     echo "    3. Hysteria2"
     echo "    4. V2Ray + TLS + WebSocket"
     echo "    5. Snell"
     echo ""
-    echo "  ${BLUE}[管理选项]${NC}"
+    echo -e "  ${BLUE}[管理选项]${NC}"
     echo "    6. 卸载服务"
     echo "    7. 查看状态"
     echo "    8. 健康检查"
