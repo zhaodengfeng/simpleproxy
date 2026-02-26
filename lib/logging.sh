@@ -5,7 +5,11 @@
 # 日志级别: DEBUG < INFO < WARN < ERROR
 
 # 日志文件 (从 common.sh 导入)
-LOG_FILE="${LOG_FILE:-/var/log/simpleproxy.log}"
+# 若 common.sh 已将 LOG_FILE 声明为 readonly，这里不能再次赋值
+# 仅在未定义时兜底设置
+if [[ -z "${LOG_FILE:-}" ]]; then
+    LOG_FILE="/var/log/simpleproxy.log"
+fi
 
 # 最大日志大小 (10MB)
 readonly LOG_MAX_SIZE=$((10*1024*1024))
