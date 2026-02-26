@@ -84,7 +84,7 @@ install_v2ray() {
     # 安装 Xray
     if ! command -v xray &> /dev/null; then
         echo -e "${BLUE}正在安装 Xray...${NC}"
-        run_remote_script "https://github.com/XTLS/Xray-install/raw/main/install-release.sh" @ install || return 1
+        run_remote_script "https://github.com/XTLS/Xray-install/raw/main/install-release.sh" install || return 1
     fi
     
     mkdir -p /usr/local/etc/xray
@@ -321,7 +321,7 @@ upgrade_v2ray() {
     bak=$(backup_upgrade_context "v2ray")
     cp -f "$V2RAY_CONFIG" "$bak/v2ray.json" 2>/dev/null || true
     
-    run_remote_script "https://github.com/XTLS/Xray-install/raw/main/install-release.sh" @ install || {
+    run_remote_script "https://github.com/XTLS/Xray-install/raw/main/install-release.sh" install || {
         rollback_file_if_needed "$bak/v2ray.json" "$V2RAY_CONFIG"
         return 1
     }
