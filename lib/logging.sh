@@ -19,8 +19,17 @@ readonly LOG_KEEP_COUNT=5
 init_logging() {
     local log_dir
     log_dir=$(dirname "$LOG_FILE")
-    [[ ! -d "$log_dir" ]] && mkdir -p "$log_dir"
-    [[ ! -f "$LOG_FILE" ]] && touch "$LOG_FILE" && chmod 640 "$LOG_FILE"
+
+    if [[ ! -d "$log_dir" ]]; then
+        mkdir -p "$log_dir"
+    fi
+
+    if [[ ! -f "$LOG_FILE" ]]; then
+        touch "$LOG_FILE"
+        chmod 640 "$LOG_FILE"
+    fi
+
+    return 0
 }
 
 # 日志轮转
@@ -58,7 +67,11 @@ log_write() {
     rotate_log_if_needed
     
     printf '[%s] [%s] %s\n' "$timestamp" "$level" "$message" >> "$LOG_FILE"
-    [[ "$show_console" == "true" ]] && echo "[$level] $message"
+    if [[ "$show_console" == "true" ]]; then
+        echo "[$level] $message"
+    fi
+
+    return 0
 }
 
 # 调试日志
