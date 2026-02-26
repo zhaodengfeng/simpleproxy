@@ -46,6 +46,13 @@ If you need unattended automation, you can skip that confirmation:
 ALLOW_REMOTE_SCRIPT=1 simpleproxy
 ```
 
+Fully unattended one-liner (install + first run):
+
+```bash
+bash <(curl -fsSL https://raw.githubusercontent.com/zhaodengfeng/simpleproxy/main/install.sh) \
+  && ALLOW_REMOTE_SCRIPT=1 simpleproxy
+```
+
 ## Usage
 
 ```bash
