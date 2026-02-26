@@ -589,7 +589,11 @@ apply_ssl() {
 
 setup_cert_renewal() {
     local domain=$1
-    
+
+    # 确保续期 hook 目录存在（某些系统默认没有该目录）
+    mkdir -p /etc/letsencrypt/renewal-hooks/deploy
+    mkdir -p /usr/local/etc/xray/certs
+
     cat > /etc/letsencrypt/renewal-hooks/deploy/xray-certs.sh <<'EOF'
 #!/bin/bash
 for dom in $(find /etc/letsencrypt/live -mindepth 1 -maxdepth 1 -type d | xargs -n1 basename); do
