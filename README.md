@@ -36,6 +36,16 @@ bash <(curl -fsSL https://raw.githubusercontent.com/zhaodengfeng/simpleproxy/mai
 
 After installation, use the `simpleproxy` command from anywhere.
 
+### About Remote Installer Confirmation (new)
+
+For higher safety, when some protocol installers need to execute upstream remote scripts (e.g. Xray/Hysteria), SimpleProxy will ask you to type `YES` before continuing.
+
+If you need unattended automation, you can skip that confirmation:
+
+```bash
+ALLOW_REMOTE_SCRIPT=1 simpleproxy
+```
+
 ## Usage
 
 ```bash

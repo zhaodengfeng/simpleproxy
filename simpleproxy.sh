@@ -7,6 +7,18 @@
 
 set -euo pipefail
 
+# 全局锁：防止并发运行导致状态/配置冲突
+acquire_global_lock() {
+    local lock_file="/var/lock/simpleproxy.lock"
+    mkdir -p /var/lock
+    exec 9>"$lock_file"
+    if ! flock -n 9; then
+        echo -e "\033[1;33m另一个 simpleproxy 实例正在运行，请稍后再试。\033[0m"
+        exit 1
+    fi
+}
+acquire_global_lock
+
 # 获取脚本目录 (处理符号链接情况)
 if [[ -L "${BASH_SOURCE[0]}" ]]; then
     # 如果是符号链接，获取真实路径

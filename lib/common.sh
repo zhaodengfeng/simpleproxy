@@ -417,6 +417,17 @@ open_firewall_port_range() {
 run_remote_script() {
     local script_url="$1"
     shift
+
+    # 默认需要人工确认；自动化场景可设置 ALLOW_REMOTE_SCRIPT=1 跳过
+    if [[ "${ALLOW_REMOTE_SCRIPT:-0}" != "1" ]]; then
+        echo -e "${YELLOW}安全确认: 即将下载并执行远程脚本(高风险操作)${NC}"
+        echo -e "URL: ${script_url}"
+        read -r -p "请输入 YES 继续，其他任意输入取消: " confirm_remote
+        if [[ "$confirm_remote" != "YES" ]]; then
+            echo -e "${YELLOW}已取消远程脚本执行${NC}"
+            return 1
+        fi
+    fi
     
     local tmp_script
     tmp_script=$(mktemp /tmp/simpleproxy-remote.XXXXXX.sh) || return 1
@@ -484,6 +495,12 @@ install_acme() {
 
 apply_ssl() {
     local domain=$1
+
+    if ! validate_domain "$domain"; then
+        echo -e "${RED}错误: 域名格式无效: ${domain}${NC}"
+        return 1
+    fi
+
     local nginx_was_active=0
     local apache2_was_active=0
     local httpd_was_active=0
