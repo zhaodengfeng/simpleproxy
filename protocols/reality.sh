@@ -44,7 +44,8 @@ install_reality() {
     local ruuid
     ruuid=$(gen_uuid)
     local rshortid
-    rshortid=$(gen_random 8)
+    # Reality shortIds 需为十六进制字符串
+    rshortid=$(openssl rand -hex 4)
     local server_ip
     server_ip=$(get_public_ip)
     local rsni="www.microsoft.com"
@@ -244,7 +245,13 @@ EOF
     # 验证配置
     echo -e "${BLUE}正在验证 Xray 配置...${NC}"
     local test_output
-    test_output=$(xray -test -config "$REALITY_CONFIG" 2>&1)
+    if ! test_output=$(xray -test -config "$REALITY_CONFIG" 2>&1); then
+        echo -e "${RED}✗ 配置验证失败${NC}"
+        echo -e "${YELLOW}错误信息:${NC}"
+        echo "$test_output" | head -5
+        return 1
+    fi
+
     if echo "$test_output" | grep -q "Configuration OK"; then
         echo -e "${GREEN}✓ 配置验证通过${NC}"
     else

@@ -225,7 +225,12 @@ EOF
     # 验证配置
     echo -e "${BLUE}正在验证 Xray 配置...${NC}"
     local test_output
-    test_output=$(xray -test -config "$V2RAY_CONFIG" 2>&1)
+    if ! test_output=$(xray -test -config "$V2RAY_CONFIG" 2>&1); then
+        echo -e "${RED}✗ 配置验证失败${NC}"
+        echo "$test_output" | head -5
+        return 1
+    fi
+
     if echo "$test_output" | grep -q "Configuration OK"; then
         echo -e "${GREEN}✓ 配置验证通过${NC}"
     else
