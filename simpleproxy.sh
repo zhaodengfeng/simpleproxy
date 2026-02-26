@@ -162,6 +162,7 @@ show_menu() {
     echo "    8. 健康检查"
     echo "    9. 完全卸载"
     echo "   10. 配置 AI 分流 (SS 上游)"
+    echo "   11. 关闭 AI 分流"
     echo ""
     echo "    0. 退出"
     echo ""
@@ -394,6 +395,65 @@ apply_ai_shunt() {
     return 0
 }
 
+disable_ai_shunt_in_config() {
+    local cfg="$1"
+    [[ -f "$cfg" ]] || return 1
+
+    python3 - "$cfg" <<'PY'
+import json,sys
+cfg=sys.argv[1]
+with open(cfg,'r',encoding='utf-8') as f:
+    data=json.load(f)
+
+outbounds=data.get('outbounds',[])
+outbounds=[o for o in outbounds if o.get('tag')!='ai-ss-out']
+data['outbounds']=outbounds
+
+routing=data.get('routing',{})
+rules=routing.get('rules',[])
+rules=[r for r in rules if r.get('outboundTag')!='ai-ss-out']
+routing['rules']=rules
+data['routing']=routing
+
+with open(cfg,'w',encoding='utf-8') as f:
+    json.dump(data,f,ensure_ascii=False,indent=2)
+PY
+}
+
+disable_ai_shunt() {
+    local changed=0
+
+    if [[ -f /usr/local/etc/xray/reality.json ]]; then
+        disable_ai_shunt_in_config /usr/local/etc/xray/reality.json && changed=1
+        if xray -test -config /usr/local/etc/xray/reality.json >/dev/null 2>&1; then
+            systemctl restart xray-reality.service 2>/dev/null || true
+        else
+            echo -e "${RED}Reality 配置校验失败，回滚请检查备份${NC}"
+            return 1
+        fi
+    fi
+
+    if [[ -f /usr/local/etc/xray/v2ray.json ]]; then
+        disable_ai_shunt_in_config /usr/local/etc/xray/v2ray.json && changed=1
+        if xray -test -config /usr/local/etc/xray/v2ray.json >/dev/null 2>&1; then
+            systemctl restart xray-v2ray.service 2>/dev/null || true
+        else
+            echo -e "${RED}V2Ray 配置校验失败，回滚请检查备份${NC}"
+            return 1
+        fi
+    fi
+
+    rm -f "$AI_UPSTREAM_FILE"
+
+    if [[ $changed -eq 0 ]]; then
+        echo -e "${YELLOW}未检测到 Reality/V2Ray 配置文件，无需关闭${NC}"
+        return 1
+    fi
+
+    echo -e "${GREEN}AI 分流已关闭${NC}"
+    return 0
+}
+
 # ============================================
 # 自检模式 (无网络/无副作用)
 # ============================================
@@ -535,6 +595,11 @@ main() {
                 ;;
             10)
                 apply_ai_shunt || true
+                echo ""
+                read -p "按回车键继续..."
+                ;;
+            11)
+                disable_ai_shunt || true
                 echo ""
                 read -p "按回车键继续..."
                 ;;
