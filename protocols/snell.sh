@@ -20,7 +20,7 @@ install_snell() {
     
     # 请求端口
     echo ""
-    read -t 15 -p "请输入端口号(回车或等待15秒随机生成): " snell_port_input
+    read -t 15 -p "请输入端口号(回车或等待15秒随机生成): " snell_port_input || true
     local snell_port
     if [[ -n "$snell_port_input" ]]; then
         snell_port=$snell_port_input

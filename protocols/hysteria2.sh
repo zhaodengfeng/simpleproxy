@@ -21,7 +21,7 @@ install_hysteria2() {
     
     # 请求端口
     echo ""
-    read -t 15 -p "请输入端口号(回车或等待15秒随机生成): " hyport_input
+    read -t 15 -p "请输入端口号(回车或等待15秒随机生成): " hyport_input || true
     local hyport
     if [[ -n "$hyport_input" ]]; then
         hyport=$hyport_input
@@ -68,13 +68,13 @@ install_hysteria2() {
     if [[ "$use_hop" =~ ^[Yy]$ ]]; then
         echo -e "${YELLOW}端口跳跃配置:${NC}"
         
-        read -t 15 -p "请输入起始端口 (默认: $((hyport+1))): " hop_start_input
+        read -t 15 -p "请输入起始端口 (默认: $((hyport+1))): " hop_start_input || true
         hop_start=${hop_start_input:-$((hyport+1))}
         
-        read -t 15 -p "请输入结束端口 (默认: $((hyport+100))): " hop_end_input
+        read -t 15 -p "请输入结束端口 (默认: $((hyport+100))): " hop_end_input || true
         hop_end=${hop_end_input:-$((hyport+100))}
         
-        read -t 15 -p "请输入跳跃间隔秒数 (默认: 30): " hop_interval_input
+        read -t 15 -p "请输入跳跃间隔秒数 (默认: 30): " hop_interval_input || true
         hop_interval=${hop_interval_input:-30}
         
         echo -e "${GREEN}端口跳跃: ${hop_start}-${hop_end}, 间隔 ${hop_interval} 秒${NC}"

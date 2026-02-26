@@ -22,7 +22,7 @@ install_shadowsocks() {
     
     # 请求端口输入
     echo ""
-    read -t 15 -p "请输入端口号(回车或等待15秒随机生成): " ssport_input
+    read -t 15 -p "请输入端口号(回车或等待15秒随机生成): " ssport_input || true
     local ssport
     if [[ -n "$ssport_input" ]]; then
         ssport=$ssport_input
@@ -52,7 +52,7 @@ install_shadowsocks() {
     echo " 4. aes-256-gcm"
     echo " 5. aes-128-gcm"
     echo " 6. chacha20-ietf-poly1305"
-    read -t 15 -p "请输入数字(回车或等待15秒使用默认): " ss_method_choice
+    read -t 15 -p "请输入数字(回车或等待15秒使用默认): " ss_method_choice || true
     
     local smethod="2022-blake3-aes-128-gcm"
     local sspass=""

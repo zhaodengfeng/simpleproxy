@@ -20,7 +20,7 @@ install_reality() {
     
     # 请求端口
     echo ""
-    read -t 15 -p "请输入端口号(回车或等待15秒随机生成): " rport_input
+    read -t 15 -p "请输入端口号(回车或等待15秒随机生成): " rport_input || true
     local rport
     if [[ -n "$rport_input" ]]; then
         rport=$rport_input

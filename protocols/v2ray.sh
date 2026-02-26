@@ -31,7 +31,7 @@ install_v2ray() {
         return 1
     fi
     
-    read -t 15 -p "请输入端口(回车或等待15秒默认为443): " GET_PORT
+    read -t 15 -p "请输入端口(回车或等待15秒默认为443): " GET_PORT || true
     GET_PORT=${GET_PORT:-443}
     
     if ! validate_port "$GET_PORT"; then
