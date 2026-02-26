@@ -160,9 +160,9 @@ install_reality() {
   ]
 }
 EOF
-        # 设置自动续期
+        # 设置自动续期（失败不阻断安装）
         if command -v setup_cert_renewal >/dev/null 2>&1; then
-            setup_cert_renewal "$rdomain"
+            setup_cert_renewal "$rdomain" || echo -e "${YELLOW}提示: 自动续期设置失败，可稍后手动配置${NC}"
         fi
         
         cat > "$REALITY_CLIENT" <<EOF
