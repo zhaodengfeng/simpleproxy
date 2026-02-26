@@ -223,6 +223,70 @@ handle_status() {
 }
 
 # ============================================
+# 自检模式 (无网络/无副作用)
+# ============================================
+
+self_test() {
+    local failed=0
+    local root_dir="$SCRIPT_DIR"
+
+    echo -e "${BLUE}[Self-Test] 开始自检...${NC}"
+
+    # 1) 基础文件检查
+    local required=(
+        "$root_dir/simpleproxy.sh"
+        "$root_dir/lib/common.sh"
+        "$root_dir/lib/logging.sh"
+        "$root_dir/protocols/shadowsocks.sh"
+        "$root_dir/protocols/reality.sh"
+        "$root_dir/protocols/hysteria2.sh"
+        "$root_dir/protocols/v2ray.sh"
+        "$root_dir/protocols/snell.sh"
+    )
+
+    for f in "${required[@]}"; do
+        if [[ -f "$f" ]]; then
+            echo "[OK] 文件存在: $f"
+        else
+            echo "[FAIL] 文件缺失: $f"
+            failed=$((failed + 1))
+        fi
+    done
+
+    # 2) 语法检查
+    for f in "$root_dir/simpleproxy.sh" "$root_dir"/lib/*.sh "$root_dir"/protocols/*.sh; do
+        if bash -n "$f"; then
+            echo "[OK] 语法通过: $(basename "$f")"
+        else
+            echo "[FAIL] 语法错误: $(basename "$f")"
+            failed=$((failed + 1))
+        fi
+    done
+
+    # 3) 动作分发检查（只做状态查询，避免副作用）
+    local protocols=(shadowsocks reality hysteria2 v2ray snell)
+    for p in "${protocols[@]}"; do
+        local script="$root_dir/protocols/${p}.sh"
+        local action="status_${p}"
+        if env MODULE_DIR="$root_dir/lib" bash "$script" "$action" >/dev/null 2>&1; then
+            echo "[OK] 分发正常: ${p} -> ${action}"
+        else
+            # status 在未安装时可能返回非0（例如未安装），不视为阻断
+            echo "[WARN] 状态返回非0(可能未安装): ${p}"
+        fi
+    done
+
+    echo ""
+    if [[ $failed -eq 0 ]]; then
+        echo -e "${GREEN}[Self-Test] 通过：未发现阻断性问题。${NC}"
+        return 0
+    else
+        echo -e "${RED}[Self-Test] 失败：发现 ${failed} 个问题。${NC}"
+        return 1
+    fi
+}
+
+# ============================================
 # 主程序
 # ============================================
 
@@ -279,6 +343,21 @@ main() {
         esac
     done
 }
+
+# 参数入口
+case "${1:-}" in
+    --self-test)
+        self_test
+        exit $?
+        ;;
+    -h|--help)
+        echo "SimpleProxy"
+        echo "用法:"
+        echo "  simpleproxy              # 启动交互菜单"
+        echo "  simpleproxy --self-test  # 运行无副作用自检"
+        exit 0
+        ;;
+esac
 
 # 运行主程序
 main
