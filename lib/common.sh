@@ -609,10 +609,13 @@ systemctl restart xray-v2ray.service 2>/dev/null || true
 EOF
     chmod +x /etc/letsencrypt/renewal-hooks/deploy/xray-certs.sh 2>/dev/null || true
     
-    # 添加 cron 任务
-    (crontab -l 2>/dev/null | grep -v "acme.sh --cron"; echo "0 3 * * * $HOME/.acme.sh/acme.sh --cron --home \"$HOME/.acme.sh\" > /dev/null 2>&1") | crontab -
-    
-    echo -e "${GREEN}证书自动续期已设置${NC}"
+    # 添加 cron 任务（若系统未安装 crontab，则仅提示不阻断安装）
+    if command -v crontab >/dev/null 2>&1; then
+        (crontab -l 2>/dev/null | grep -v "acme.sh --cron"; echo "0 3 * * * $HOME/.acme.sh/acme.sh --cron --home \"$HOME/.acme.sh\" > /dev/null 2>&1") | crontab - || true
+        echo -e "${GREEN}证书自动续期已设置${NC}"
+    else
+        echo -e "${YELLOW}提示: 未检测到 crontab，已跳过自动续期定时任务设置${NC}"
+    fi
 }
 
 # 自动初始化
