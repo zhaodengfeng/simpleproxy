@@ -68,7 +68,7 @@ install_reality() {
     # 安装 Xray (如果未安装)
     if ! command -v xray &> /dev/null; then
         echo -e "${BLUE}正在安装 Xray...${NC}"
-        run_remote_script "https://github.com/XTLS/Xray-install/raw/main/install-release.sh" @ install || return 1
+        run_remote_script "https://github.com/XTLS/Xray-install/raw/main/install-release.sh" install || return 1
         xray_installed=true
     fi
     
@@ -296,7 +296,7 @@ upgrade_reality() {
     bak=$(backup_upgrade_context "reality")
     cp -f "$REALITY_CONFIG" "$bak/reality.json" 2>/dev/null || true
     
-    run_remote_script "https://github.com/XTLS/Xray-install/raw/main/install-release.sh" @ install || {
+    run_remote_script "https://github.com/XTLS/Xray-install/raw/main/install-release.sh" install || {
         rollback_file_if_needed "$bak/reality.json" "$REALITY_CONFIG"
         return 1
     }
