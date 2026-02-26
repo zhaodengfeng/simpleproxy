@@ -55,7 +55,7 @@ input_domain() {
         return 1
     fi
     
-    read -t 15 -p "请输入端口(回车或等待15秒默认为443): " GET_PORT
+    read -t 15 -p "请输入端口(回车或等待15秒默认为443): " GET_PORT || true
     GET_PORT=${GET_PORT:-443}
     
     if ! validate_port "$GET_PORT"; then
@@ -236,22 +236,24 @@ main() {
         
         case $choice in
             1|2|3|4|5)
-                handle_install "$choice"
+                if ! handle_install "$choice"; then
+                    echo -e "${RED}安装流程未完成，请查看上方提示。${NC}"
+                fi
                 echo ""
                 read -p "按回车键继续..."
                 ;;
             6)
-                handle_uninstall
+                handle_uninstall || true
                 echo ""
                 read -p "按回车键继续..."
                 ;;
             7)
-                handle_status
+                handle_status || true
                 echo ""
                 read -p "按回车键继续..."
                 ;;
             8)
-                health_check
+                health_check || true
                 echo ""
                 read -p "按回车键继续..."
                 ;;
