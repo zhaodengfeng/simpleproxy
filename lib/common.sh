@@ -484,10 +484,44 @@ set_timezone() {
 # SSL 证书函数
 # ============================================
 
+run_remote_script() {
+    local script_url="$1"
+    shift || true
+
+    # 默认禁用远程脚本执行（供应链风险）。
+    # 如需允许，请在执行前显式设置环境变量：ALLOW_REMOTE_INSTALL=1
+    if [[ "${ALLOW_REMOTE_INSTALL:-}" != "1" ]]; then
+        echo -e "${RED}已阻止执行远程安装脚本: ${script_url}${NC}"
+        echo -e "${YELLOW}如确认需要执行，请使用：ALLOW_REMOTE_INSTALL=1 bash simpleproxy.sh（或你的主入口脚本）${NC}"
+        return 1
+    fi
+
+    local tmp_script
+    tmp_script="$(mktemp /tmp/simpleproxy-remote.XXXXXX.sh)" || return 1
+
+    if ! curl -fL --proto '=https' --tlsv1.2 --retry 3 --retry-delay 1 "$script_url" -o "$tmp_script"; then
+        rm -f "$tmp_script"
+        return 1
+    fi
+
+    if [[ ! -s "$tmp_script" ]]; then
+        rm -f "$tmp_script"
+        return 1
+    fi
+
+    bash "$tmp_script" "$@"
+    local rc=$?
+    rm -f "$tmp_script"
+    return $rc
+}
+
 install_acme() {
     if [[ ! -f "$HOME/.acme.sh/acme.sh" ]]; then
         echo -e "${BLUE}Installing acme.sh...${NC}"
-        curl -fsSL --proto '=https' --tlsv1.2 https://get.acme.sh | sh -s email=admin@localhost.com
+        run_remote_script "https://get.acme.sh/" -s email=admin@localhost.com || {
+            echo -e "${RED}acme.sh 安装失败${NC}"
+            return 1
+        }
         "$HOME/.acme.sh/acme.sh" --set-default-ca --server letsencrypt
     fi
     export PATH="$HOME/.acme.sh:$PATH"

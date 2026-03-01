@@ -1,7 +1,7 @@
 #!/bin/bash
 # snell.sh - Snell 协议管理
 
-MODULE_DIR="${MODULE_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../lib" && pwd)}"
+readonly MODULE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../lib" && pwd)"
 source "${MODULE_DIR}/common.sh"
 source "${MODULE_DIR}/logging.sh"
 
@@ -197,26 +197,31 @@ upgrade_snell() {
     [[ -z "$snell_version" ]] && snell_version="4.1.1"
     
     local download_url="https://github.com/surge-networks/snell/releases/download/v${snell_version}/snell-server-v${snell_version}-linux-${snell_arch}.zip"
-    
-    cd /tmp || return 1
-    
-    if ! wget -q "$download_url" -O snell-server.zip; then
+
+    local tmp_dir
+    tmp_dir=$(mktemp -d /tmp/simpleproxy-snell-upg.XXXXXX) || return 1
+    chmod 700 "$tmp_dir"
+
+    local zip_file="$tmp_dir/snell-server.zip"
+
+    if ! wget -q "$download_url" -O "$zip_file"; then
         echo -e "${RED}下载 Snell 失败${NC}"
         rollback_file_if_needed "$bak/snell-server" /usr/local/bin/snell-server
         rollback_file_if_needed "$bak/config.conf" "$SNELL_CONFIG_FILE"
+        rm -rf "$tmp_dir"
         return 1
     fi
-    
-    if ! unzip -o snell-server.zip; then
+
+    if ! unzip -o "$zip_file" -d "$tmp_dir"; then
         echo -e "${RED}解压失败${NC}"
         rollback_file_if_needed "$bak/snell-server" /usr/local/bin/snell-server
-        rm -f snell-server.zip
+        rm -rf "$tmp_dir"
         return 1
     fi
-    
-    mv snell-server /usr/local/bin/
+
+    mv "$tmp_dir/snell-server" /usr/local/bin/
     chmod +x /usr/local/bin/snell-server
-    rm -f snell-server.zip
+    rm -rf "$tmp_dir"
     
     systemctl start "$SNELL_SERVICE"
     echo -e "${GREEN}Snell 升级完成!${NC}"

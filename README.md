@@ -36,22 +36,24 @@ bash <(curl -fsSL https://raw.githubusercontent.com/zhaodengfeng/simpleproxy/mai
 
 After installation, use the `simpleproxy` command from anywhere.
 
-### About Remote Installer Confirmation (new)
+### About Remote Installer Execution (important)
 
-For higher safety, when some protocol installers need to execute upstream remote scripts (e.g. Xray/Hysteria), SimpleProxy will ask you to type `YES` before continuing.
+出于供应链安全考虑：**SimpleProxy 默认禁止执行任何远程脚本**（例如 acme.sh / Xray / Hysteria2 的 upstream installer）。
 
-If you need unattended automation, you can skip that confirmation:
+当你确实需要这些能力时，请在运行前显式开启：
 
 ```bash
-ALLOW_REMOTE_SCRIPT=1 simpleproxy
+ALLOW_REMOTE_INSTALL=1 simpleproxy
 ```
 
-Fully unattended one-liner (install + first run):
+一条命令（安装 + 首次运行，且允许远程脚本执行）：
 
 ```bash
 bash <(curl -fsSL https://raw.githubusercontent.com/zhaodengfeng/simpleproxy/main/install.sh) \
-  && ALLOW_REMOTE_SCRIPT=1 simpleproxy
+  && ALLOW_REMOTE_INSTALL=1 simpleproxy
 ```
+
+> 说明：开启后仍然会从 HTTPS 下载脚本到临时文件再执行；如果你追求更强的可复现/可验证性，建议自行做版本 pin + hash 校验。
 
 ## Usage
 
@@ -62,6 +64,18 @@ sudo simpleproxy
 # Or run directly
 sudo /opt/simpleproxy/simpleproxy.sh
 ```
+
+### AI 分流（SS 上游）
+
+SimpleProxy 支持把命中 **AI/OpenAI 规则** 的流量单独分流到一个 **Shadowsocks 上游**（适用于你已有上游 SS，希望仅让 AI 相关域名走上游）。
+
+- 菜单：
+  - `10. 配置 AI 分流 (SS 上游)`
+  - `11. 关闭 AI 分流`
+- 规则来源：会拉取并合并 ACL4SSR 的 `AI.list` 与 `OpenAi.list`，生成本地规则文件。
+- 配置方式：会让你输入上游 SS 的 server/port/method/password。
+
+安全说明：AI 上游配置文件**不会再通过 `source` 执行**，而是解析固定 `KEY=VALUE`（已做端口校验），避免命令注入。
 
 ### Menu Options
 
@@ -178,16 +192,20 @@ sudo simpleproxy  # Option 8
 ### Manual protocol management
 ```bash
 # Example: Check shadowsocks status
-MODULE_DIR=/opt/simpleproxy/lib bash /opt/simpleproxy/protocols/shadowsocks.sh status_shadowsocks
+cd /opt/simpleproxy
+bash ./protocols/shadowsocks.sh status_shadowsocks
 ```
+
+> 注意：协议脚本会自行计算并锁定 lib 路径（不再接受通过环境变量覆盖 MODULE_DIR），以避免 source 路径劫持风险。
 
 ## Security Considerations
 
-- All configuration files are created with restrictive permissions (600/644)
-- SSL certificates are properly permissioned (600 for private keys)
-- Input validation for domains, ports, and passwords
-- No shell metacharacters allowed in keys
-- Automatic firewall rules for opened ports
+- 配置文件使用更严格的权限（例如私钥 **600**，证书 **644**）
+- AI 分流上游配置不再通过 `source` 加载，改为解析固定 `KEY=VALUE`，避免命令注入
+- 远程脚本执行默认禁用；需要时必须显式设置 `ALLOW_REMOTE_INSTALL=1`
+- 输入校验：域名/端口/密码等基础检查
+- 临时文件/下载尽量使用 `mktemp`，降低 /tmp 竞态与覆盖风险
+- 自动防火墙放行（ufw/firewalld）
 
 ## Contributing
 
