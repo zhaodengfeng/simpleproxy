@@ -2,7 +2,7 @@
 # reality.sh - Reality (Xray) 协议管理
 # 支持 Reality 模式和 TLS 模式
 
-MODULE_DIR="${MODULE_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../lib" && pwd)}"
+readonly MODULE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../lib" && pwd)"
 source "${MODULE_DIR}/common.sh"
 source "${MODULE_DIR}/logging.sh"
 

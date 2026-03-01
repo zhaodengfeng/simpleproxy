@@ -1,7 +1,7 @@
 #!/bin/bash
 # v2ray.sh - V2Ray + TLS + WebSocket 协议管理
 
-MODULE_DIR="${MODULE_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../lib" && pwd)}"
+readonly MODULE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../lib" && pwd)"
 source "${MODULE_DIR}/common.sh"
 source "${MODULE_DIR}/logging.sh"
 

@@ -309,14 +309,51 @@ configure_ai_upstream_ss() {
     fi
 
     mkdir -p "$STATE_DIR"
-    cat > "$AI_UPSTREAM_FILE" <<EOF
-AI_SS_SERVER=${AI_SS_SERVER}
-AI_SS_PORT=${AI_SS_PORT}
-AI_SS_METHOD=${AI_SS_METHOD}
-AI_SS_PASSWORD=${AI_SS_PASSWORD}
-EOF
+
+    # 防止换行/控制字符注入到配置文件（后续会被读取）
+    if [[ "$AI_SS_SERVER$AI_SS_PORT$AI_SS_METHOD$AI_SS_PASSWORD" == *$'\n'* || \
+          "$AI_SS_SERVER$AI_SS_PORT$AI_SS_METHOD$AI_SS_PASSWORD" == *$'\r'* ]]; then
+        echo -e "${RED}上游参数包含非法换行字符${NC}"
+        return 1
+    fi
+
+    {
+        printf 'AI_SS_SERVER=%s\n' "$AI_SS_SERVER"
+        printf 'AI_SS_PORT=%s\n' "$AI_SS_PORT"
+        printf 'AI_SS_METHOD=%s\n' "$AI_SS_METHOD"
+        printf 'AI_SS_PASSWORD=%s\n' "$AI_SS_PASSWORD"
+    } > "$AI_UPSTREAM_FILE"
     chmod 600 "$AI_UPSTREAM_FILE"
     echo -e "${GREEN}AI 上游 SS 配置已保存${NC}"
+    return 0
+}
+
+load_ai_upstream_ss() {
+    local line
+    AI_SS_SERVER=""
+    AI_SS_PORT=""
+    AI_SS_METHOD=""
+    AI_SS_PASSWORD=""
+
+    while IFS= read -r line || [[ -n "$line" ]]; do
+        case "$line" in
+            AI_SS_SERVER=*) AI_SS_SERVER="${line#AI_SS_SERVER=}" ;;
+            AI_SS_PORT=*) AI_SS_PORT="${line#AI_SS_PORT=}" ;;
+            AI_SS_METHOD=*) AI_SS_METHOD="${line#AI_SS_METHOD=}" ;;
+            AI_SS_PASSWORD=*) AI_SS_PASSWORD="${line#AI_SS_PASSWORD=}" ;;
+            ""|\#*) : ;;
+            *) : ;;
+        esac
+    done < "$AI_UPSTREAM_FILE"
+
+    if [[ -z "$AI_SS_SERVER" || -z "$AI_SS_PORT" || -z "$AI_SS_METHOD" || -z "$AI_SS_PASSWORD" ]]; then
+        echo -e "${RED}上游配置不完整: ${AI_UPSTREAM_FILE}${NC}"
+        return 1
+    fi
+    if ! validate_port "$AI_SS_PORT"; then
+        echo -e "${RED}上游端口无效: ${AI_SS_PORT}${NC}"
+        return 1
+    fi
     return 0
 }
 
@@ -326,9 +363,7 @@ apply_ai_shunt_to_config() {
     [[ -f "$AI_UPSTREAM_FILE" ]] || { echo -e "${RED}未找到上游配置: ${AI_UPSTREAM_FILE}${NC}"; return 1; }
     [[ -f "$AI_DOMAIN_FILE" ]] || { echo -e "${RED}未找到 AI 规则文件: ${AI_DOMAIN_FILE}${NC}"; return 1; }
 
-    set -a
-    source "$AI_UPSTREAM_FILE"
-    set +a
+    load_ai_upstream_ss || return 1
 
     python3 - "$cfg" "$AI_DOMAIN_FILE" "$AI_SS_SERVER" "$AI_SS_PORT" "$AI_SS_METHOD" "$AI_SS_PASSWORD" <<'PY'
 import json,sys

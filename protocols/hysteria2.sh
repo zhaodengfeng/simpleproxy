@@ -2,7 +2,7 @@
 # hysteria2.sh - Hysteria2 协议管理
 # 支持端口跳跃和自定义域名
 
-MODULE_DIR="${MODULE_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../lib" && pwd)}"
+readonly MODULE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../lib" && pwd)"
 source "${MODULE_DIR}/common.sh"
 source "${MODULE_DIR}/logging.sh"
 
