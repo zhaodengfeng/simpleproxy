@@ -403,22 +403,29 @@ apply_ai_shunt() {
     configure_ai_upstream_ss || return 1
 
     local changed=0
+    local bak
+    bak=$(backup_upgrade_context "ai-shunt")
+
     if [[ -f /usr/local/etc/xray/reality.json ]]; then
+        cp -f /usr/local/etc/xray/reality.json "$bak/reality.json" 2>/dev/null || true
         apply_ai_shunt_to_config /usr/local/etc/xray/reality.json && changed=1
         if xray -test -config /usr/local/etc/xray/reality.json >/dev/null 2>&1; then
             systemctl restart xray-reality.service 2>/dev/null || true
         else
-            echo -e "${RED}Reality 配置校验失败，未生效${NC}"
+            rollback_file_if_needed "$bak/reality.json" /usr/local/etc/xray/reality.json
+            echo -e "${RED}Reality 配置校验失败，已回滚${NC}"
             return 1
         fi
     fi
 
     if [[ -f /usr/local/etc/xray/v2ray.json ]]; then
+        cp -f /usr/local/etc/xray/v2ray.json "$bak/v2ray.json" 2>/dev/null || true
         apply_ai_shunt_to_config /usr/local/etc/xray/v2ray.json && changed=1
         if xray -test -config /usr/local/etc/xray/v2ray.json >/dev/null 2>&1; then
             systemctl restart xray-v2ray.service 2>/dev/null || true
         else
-            echo -e "${RED}V2Ray 配置校验失败，未生效${NC}"
+            rollback_file_if_needed "$bak/v2ray.json" /usr/local/etc/xray/v2ray.json
+            echo -e "${RED}V2Ray 配置校验失败，已回滚${NC}"
             return 1
         fi
     fi
@@ -459,23 +466,29 @@ PY
 
 disable_ai_shunt() {
     local changed=0
+    local bak
+    bak=$(backup_upgrade_context "ai-shunt-disable")
 
     if [[ -f /usr/local/etc/xray/reality.json ]]; then
+        cp -f /usr/local/etc/xray/reality.json "$bak/reality.json" 2>/dev/null || true
         disable_ai_shunt_in_config /usr/local/etc/xray/reality.json && changed=1
         if xray -test -config /usr/local/etc/xray/reality.json >/dev/null 2>&1; then
             systemctl restart xray-reality.service 2>/dev/null || true
         else
-            echo -e "${RED}Reality 配置校验失败，回滚请检查备份${NC}"
+            rollback_file_if_needed "$bak/reality.json" /usr/local/etc/xray/reality.json
+            echo -e "${RED}Reality 配置校验失败，已回滚${NC}"
             return 1
         fi
     fi
 
     if [[ -f /usr/local/etc/xray/v2ray.json ]]; then
+        cp -f /usr/local/etc/xray/v2ray.json "$bak/v2ray.json" 2>/dev/null || true
         disable_ai_shunt_in_config /usr/local/etc/xray/v2ray.json && changed=1
         if xray -test -config /usr/local/etc/xray/v2ray.json >/dev/null 2>&1; then
             systemctl restart xray-v2ray.service 2>/dev/null || true
         else
-            echo -e "${RED}V2Ray 配置校验失败，回滚请检查备份${NC}"
+            rollback_file_if_needed "$bak/v2ray.json" /usr/local/etc/xray/v2ray.json
+            echo -e "${RED}V2Ray 配置校验失败，已回滚${NC}"
             return 1
         fi
     fi

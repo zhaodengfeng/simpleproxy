@@ -15,6 +15,7 @@ readonly NC='\033[0m' # No Color
 readonly REPO_URL="https://github.com/zhaodengfeng/simpleproxy.git"
 readonly INSTALL_DIR="/opt/simpleproxy"
 readonly BIN_LINK="/usr/local/bin/simpleproxy"
+readonly SHORT_BIN_LINK="/usr/local/bin/sp"
 readonly LOG_DIR="/var/log/simpleproxy"
 
 # 打印信息
@@ -146,11 +147,16 @@ create_symlink() {
     if [[ -e "$BIN_LINK" || -L "$BIN_LINK" ]]; then
         rm -f "$BIN_LINK"
     fi
+    if [[ -e "$SHORT_BIN_LINK" || -L "$SHORT_BIN_LINK" ]]; then
+        rm -f "$SHORT_BIN_LINK"
+    fi
 
     # 创建新的符号链接
     ln -s "$INSTALL_DIR/simpleproxy.sh" "$BIN_LINK"
+    ln -s "$INSTALL_DIR/simpleproxy.sh" "$SHORT_BIN_LINK"
 
     success "符号链接创建完成: $BIN_LINK -> $INSTALL_DIR/simpleproxy.sh"
+    success "简写命令已启用: $SHORT_BIN_LINK -> $INSTALL_DIR/simpleproxy.sh"
 }
 
 # 验证安装
@@ -163,7 +169,7 @@ verify_installation() {
         error "安装验证失败，simpleproxy.sh 不存在"
     fi
 
-    if [[ -L "$BIN_LINK" ]]; then
+    if [[ -L "$BIN_LINK" && -L "$SHORT_BIN_LINK" ]]; then
         success "命令链接验证成功"
     else
         error "命令链接创建失败"
@@ -182,13 +188,14 @@ show_completion() {
     echo ""
     echo "使用方法:"
     echo "  simpleproxy           # 启动管理界面"
+    echo "  sp                    # 启动管理界面 (简写)"
     echo "  simpleproxy --help    # 显示帮助信息"
     echo ""
     echo "或直接运行:"
     echo "  sudo $INSTALL_DIR/simpleproxy.sh"
     echo ""
     echo -e "${YELLOW}首次运行提示:${NC}"
-    echo "  1. 运行 'sudo simpleproxy' 启动交互式管理菜单"
+    echo "  1. 运行 'sudo simpleproxy' 或 'sudo sp' 启动交互式管理菜单"
     echo "  2. 首次安装 Reality / V2Ray / Hysteria2 等协议时，如需允许上游远程安装器，请显式使用:"
     echo "     ALLOW_REMOTE_INSTALL=1 sudo simpleproxy"
     echo "  3. 运行 'sudo simpleproxy --help' 可查看帮助与安全提示"

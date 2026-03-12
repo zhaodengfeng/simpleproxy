@@ -34,6 +34,8 @@ After installation, run:
 
 ```bash
 sudo simpleproxy
+# or
+sudo sp
 ```
 
 ## Remote installer execution (important)
@@ -125,6 +127,7 @@ Note: protocol scripts compute and lock their `lib/` path internally (no `MODULE
 
 - Private keys are set to **600** (certs typically **644**)
 - AI upstream config is not sourced; it is parsed
+- AI shunt changes now back up Xray configs and roll back automatically on validation failure
 - Remote installer execution is opt-in via `ALLOW_REMOTE_INSTALL=1`
 - Temporary downloads prefer `mktemp` to reduce `/tmp` race/overwrite risk
 
