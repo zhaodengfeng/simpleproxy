@@ -36,7 +36,7 @@ install_reality() {
     fi
     
     # 检查端口占用
-    if netstat -ntlp 2>/dev/null | grep -q ":$rport "; then
+    if has_listening_port "$rport"; then
         echo -e "${RED}错误: 端口 ${rport} 已被占用${NC}"
         return 1
     fi

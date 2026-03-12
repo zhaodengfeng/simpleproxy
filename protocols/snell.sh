@@ -36,7 +36,7 @@ install_snell() {
     fi
     
     # 检查端口占用
-    if netstat -ntlp 2>/dev/null | grep -q ":$snell_port "; then
+    if has_listening_port "$snell_port"; then
         echo -e "${RED}错误: 端口 ${snell_port} 已被占用${NC}"
         return 1
     fi

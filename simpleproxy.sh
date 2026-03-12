@@ -17,7 +17,6 @@ acquire_global_lock() {
         exit 1
     fi
 }
-acquire_global_lock
 
 # 获取脚本目录 (处理符号链接情况)
 if [[ -L "${BASH_SOURCE[0]}" ]]; then
@@ -65,7 +64,10 @@ input_domain() {
     
     # 检查端口占用
     local isPort
-    isPort=$(netstat -ntlp 2>/dev/null | grep -E ':80 |:'"$GET_PORT"' ') || true
+    isPort=""
+    has_listening_port 80 && isPort="$(ss -tuln 2>/dev/null | grep -E '[[:space:]]:80[[:space:]]' || true)"
+    has_listening_port "$GET_PORT" && isPort="${isPort}
+$(ss -tuln 2>/dev/null | grep -E '[[:space:]]:'"$GET_PORT"'[[:space:]]' || true)"
     if [[ -n "$isPort" ]]; then
         echo -e "${YELLOW}警告: 80或${GET_PORT}端口被占用${NC}"
         echo "$isPort"
@@ -587,6 +589,8 @@ check_version_hint() {
 
 main() {
     check_root
+    acquire_global_lock
+    set_timezone
     init_directories
     check_version_hint || true
     
@@ -659,8 +663,11 @@ case "${1:-}" in
     -h|--help)
         echo "SimpleProxy"
         echo "用法:"
-        echo "  simpleproxy              # 启动交互菜单"
-        echo "  simpleproxy --self-test  # 运行无副作用自检"
+        echo "  sudo simpleproxy                         # 启动交互菜单"
+        echo "  sudo simpleproxy --self-test             # 运行无副作用自检"
+        echo ""
+        echo "注意: Reality / V2Ray / Hysteria2 / acme.sh 等上游安装器默认被阻止执行。"
+        echo "如需允许，请显式使用: ALLOW_REMOTE_INSTALL=1 sudo simpleproxy"
         exit 0
         ;;
 esac
