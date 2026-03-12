@@ -458,8 +458,11 @@ run_remote_script() {
         return 1
     fi
 
-    if ! bash "$tmp_script" "$@"; then
-        local rc=$?
+    local rc=0
+    if bash "$tmp_script" "$@"; then
+        :
+    else
+        rc=$?
         echo -e "${RED}远程脚本执行失败: ${script_url}${NC}"
         rm -f "$tmp_script"
         return "$rc"

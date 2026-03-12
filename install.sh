@@ -142,8 +142,8 @@ set_permissions() {
 create_symlink() {
     info "正在创建命令符号链接..."
 
-    # 删除旧的符号链接（如果存在）
-    if [[ -L "$BIN_LINK" ]]; then
+    # 删除旧的文件/符号链接（如果存在）
+    if [[ -e "$BIN_LINK" || -L "$BIN_LINK" ]]; then
         rm -f "$BIN_LINK"
     fi
 
@@ -188,9 +188,10 @@ show_completion() {
     echo "  sudo $INSTALL_DIR/simpleproxy.sh"
     echo ""
     echo -e "${YELLOW}首次运行提示:${NC}"
-    echo "  1. 运行 'simpleproxy' 启动交互式管理菜单"
-    echo "  2. 选择 '1. 安装代理' 开始安装代理服务"
-    echo "  3. 所有代理配置保存在 $INSTALL_DIR/config/ 目录"
+    echo "  1. 运行 'sudo simpleproxy' 启动交互式管理菜单"
+    echo "  2. 首次安装 Reality / V2Ray / Hysteria2 等协议时，如需允许上游远程安装器，请显式使用:"
+    echo "     ALLOW_REMOTE_INSTALL=1 sudo simpleproxy"
+    echo "  3. 运行 'sudo simpleproxy --help' 可查看帮助与安全提示"
     echo ""
     echo -e "${CYAN}感谢使用 SimpleProxy！${NC}"
     echo ""

@@ -106,9 +106,11 @@ sudo simpleproxy  # choose: 完全卸载
 
 ## Troubleshooting
 
+- Self-test: `sudo simpleproxy --self-test`
 - Status: `sudo simpleproxy` → menu “查看状态”
 - Logs: `tail -f /var/log/simpleproxy.log`
 - systemd logs: `journalctl -u <service-name> -f`
+- If you hit `MODULE_DIR: readonly variable`, update to the latest `main` or reinstall from the current `install.sh`
 
 ## Manual protocol invocation
 

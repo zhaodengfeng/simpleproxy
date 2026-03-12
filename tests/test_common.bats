@@ -30,3 +30,27 @@ setup(){
 @test "command_exists returns false for non-existing command" {
     ! command_exists nonexistent_command_xyz
 }
+
+@test "run_remote_script preserves remote script exit code" {
+    export ALLOW_REMOTE_INSTALL=1
+
+    curl() {
+        local out=""
+        while [[ $# -gt 0 ]]; do
+            if [[ "$1" == "-o" ]]; then
+                out="$2"
+                shift 2
+            else
+                shift
+            fi
+        done
+        cat > "$out" <<'EOF'
+#!/bin/bash
+exit 42
+EOF
+        return 0
+    }
+
+    run run_remote_script "https://example.test/fail.sh"
+    [ "$status" -eq 42 ]
+}
