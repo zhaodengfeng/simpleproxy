@@ -40,7 +40,7 @@ install_v2ray() {
     fi
     
     # 检查端口占用
-    if netstat -ntlp 2>/dev/null | grep -q ":80 " || netstat -ntlp 2>/dev/null | grep -q ":$GET_PORT "; then
+    if has_listening_port 80 || has_listening_port "$GET_PORT"; then
         echo -e "${YELLOW}警告: 80 或 ${GET_PORT} 端口被占用${NC}"
         read -p "是否继续? (y/n): " confirm
         [[ ! "$confirm" =~ ^[Yy]$ ]] && return 1

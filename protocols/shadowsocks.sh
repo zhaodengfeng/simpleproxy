@@ -38,7 +38,7 @@ install_shadowsocks() {
     fi
     
     # 检查端口占用
-    if netstat -ntlp 2>/dev/null | grep -q ":$ssport "; then
+    if has_listening_port "$ssport"; then
         echo -e "${RED}错误: 端口 ${ssport} 已被占用${NC}"
         return 1
     fi

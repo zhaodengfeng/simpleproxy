@@ -64,28 +64,28 @@ detect_os() {
 install_dependencies() {
     info "正在安装依赖..."
 
-    local deps=("curl" "git" "openssl" "wget")
+    local deps=("curl" "git" "openssl" "wget" "unzip" "python3" "socat" "net-tools")
 
     case $OS in
         ubuntu|debian)
             apt-get update -qq
-            apt-get install -y -qq "${deps[@]}" bash-completion
+            apt-get install -y -qq "${deps[@]}" iproute2 cron bash-completion
             ;;
         centos|rhel|fedora|rocky|almalinux)
             if command -v dnf &>/dev/null; then
-                dnf install -y -q "${deps[@]}" bash-completion
+                dnf install -y -q "${deps[@]}" iproute cronie bash-completion
             else
-                yum install -y -q "${deps[@]}" bash-completion
+                yum install -y -q "${deps[@]}" iproute cronie bash-completion
             fi
             ;;
         arch|manjaro)
-            pacman -Sy --noconfirm --quiet "${deps[@]}" bash-completion
+            pacman -Sy --noconfirm --quiet "${deps[@]}" iproute2 cronie bash-completion
             ;;
         alpine)
-            apk add --no-cache "${deps[@]}" bash-completion
+            apk add --no-cache "${deps[@]}" iproute2 dcron bash-completion
             ;;
         *)
-            warn "未知操作系统，请手动安装: ${deps[*]}"
+            warn "未知操作系统，请手动安装: ${deps[*]} iproute(2) cron/cronie"
             ;;
     esac
 
@@ -198,6 +198,10 @@ show_completion() {
 
 # 主函数
 main() {
+    set_timezone() {
+        timedatectl set-timezone Asia/Shanghai 2>/dev/null || true
+    }
+
     echo -e "${CYAN}═══════════════════════════════════════════════════════${NC}"
     echo -e "${CYAN}       SimpleProxy 一键安装脚本${NC}"
     echo -e "${CYAN}═══════════════════════════════════════════════════════${NC}"
@@ -205,6 +209,7 @@ main() {
 
     # 检查 root
     check_root
+    set_timezone
 
     # 检测系统
     detect_os

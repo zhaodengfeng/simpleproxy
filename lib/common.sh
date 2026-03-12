@@ -166,6 +166,23 @@ gen_uuid() {
     echo -n "$uuid"
 }
 
+# 端口占用检查（优先 ss，其次 netstat）
+has_listening_port() {
+    local port="$1"
+
+    if command -v ss >/dev/null 2>&1; then
+        ss -tuln 2>/dev/null | grep -qE "[[:space:]]:${port}[[:space:]]"
+        return $?
+    fi
+
+    if command -v netstat >/dev/null 2>&1; then
+        netstat -ntlp 2>/dev/null | grep -qE "[.:]${port}[[:space:]]"
+        return $?
+    fi
+
+    return 1
+}
+
 # 生成随机端口 (检查端口是否可用)
 gen_port() {
     local min="${1:-10000}"
@@ -173,7 +190,7 @@ gen_port() {
     local port
     while true; do
         port=$(shuf -i "$min-$max" -n 1)
-        if ! ss -tuln 2>/dev/null | grep -q ":$port "; then
+        if ! has_listening_port "$port"; then
             echo "$port"
             return 0
         fi
@@ -416,41 +433,38 @@ open_firewall_port_range() {
 
 run_remote_script() {
     local script_url="$1"
-    shift
+    shift || true
 
-    # 默认需要人工确认；自动化场景可设置 ALLOW_REMOTE_SCRIPT=1 跳过
-    if [[ "${ALLOW_REMOTE_SCRIPT:-0}" != "1" ]]; then
-        echo -e "${YELLOW}安全确认: 即将下载并执行远程脚本(高风险操作)${NC}"
-        echo -e "URL: ${script_url}"
-        read -r -p "请输入 y 继续（大小写均可），其他任意输入取消: " confirm_remote
-        if [[ ! "$confirm_remote" =~ ^[Yy]$ ]]; then
-            echo -e "${YELLOW}已取消远程脚本执行${NC}"
-            return 1
-        fi
+    # 默认禁用远程脚本执行（供应链风险）。
+    # 如需允许，请在执行前显式设置环境变量：ALLOW_REMOTE_INSTALL=1
+    if [[ "${ALLOW_REMOTE_INSTALL:-}" != "1" ]]; then
+        echo -e "${RED}已阻止执行远程安装脚本: ${script_url}${NC}"
+        echo -e "${YELLOW}如确认需要执行，请重新运行并显式允许：ALLOW_REMOTE_INSTALL=1 sudo simpleproxy${NC}"
+        return 1
     fi
-    
+
     local tmp_script
-    tmp_script=$(mktemp /tmp/simpleproxy-remote.XXXXXX.sh) || return 1
-    
+    tmp_script="$(mktemp /tmp/simpleproxy-remote.XXXXXX.sh)" || return 1
+
     if ! curl -fL --proto '=https' --tlsv1.2 --retry 3 --retry-delay 1 "$script_url" -o "$tmp_script"; then
         echo -e "${RED}下载远程脚本失败: ${script_url}${NC}"
         rm -f "$tmp_script"
         return 1
     fi
-    
-    # 基本完整性检查
+
     if [[ ! -s "$tmp_script" ]] || ! head -n 1 "$tmp_script" | grep -qE '^#!/'; then
         echo -e "${RED}远程脚本校验失败(空文件或缺少 shebang): ${script_url}${NC}"
         rm -f "$tmp_script"
         return 1
     fi
-    
+
     if ! bash "$tmp_script" "$@"; then
+        local rc=$?
         echo -e "${RED}远程脚本执行失败: ${script_url}${NC}"
         rm -f "$tmp_script"
-        return 1
+        return "$rc"
     fi
-    
+
     rm -f "$tmp_script"
     return 0
 }
@@ -462,13 +476,15 @@ run_remote_script() {
 install_common_deps() {
     local os_type
     os_type=$(detect_os)
-    
+
     if [[ "$os_type" == "debian" ]]; then
-        apt-get update -y && apt-get install -y curl wget socat cron net-tools openssl
+        apt-get update -y && apt-get install -y \
+            curl wget openssl unzip python3 socat cron net-tools iproute2
     elif [[ "$os_type" == "rhel" ]]; then
         yum update -y
         yum install -y epel-release
-        yum install -y curl wget socat cronie net-tools openssl
+        yum install -y \
+            curl wget openssl unzip python3 socat cronie net-tools iproute
     fi
 }
 
@@ -483,37 +499,6 @@ set_timezone() {
 # ============================================
 # SSL 证书函数
 # ============================================
-
-run_remote_script() {
-    local script_url="$1"
-    shift || true
-
-    # 默认禁用远程脚本执行（供应链风险）。
-    # 如需允许，请在执行前显式设置环境变量：ALLOW_REMOTE_INSTALL=1
-    if [[ "${ALLOW_REMOTE_INSTALL:-}" != "1" ]]; then
-        echo -e "${RED}已阻止执行远程安装脚本: ${script_url}${NC}"
-        echo -e "${YELLOW}如确认需要执行，请使用：ALLOW_REMOTE_INSTALL=1 bash simpleproxy.sh（或你的主入口脚本）${NC}"
-        return 1
-    fi
-
-    local tmp_script
-    tmp_script="$(mktemp /tmp/simpleproxy-remote.XXXXXX.sh)" || return 1
-
-    if ! curl -fL --proto '=https' --tlsv1.2 --retry 3 --retry-delay 1 "$script_url" -o "$tmp_script"; then
-        rm -f "$tmp_script"
-        return 1
-    fi
-
-    if [[ ! -s "$tmp_script" ]]; then
-        rm -f "$tmp_script"
-        return 1
-    fi
-
-    bash "$tmp_script" "$@"
-    local rc=$?
-    rm -f "$tmp_script"
-    return $rc
-}
 
 install_acme() {
     if [[ ! -f "$HOME/.acme.sh/acme.sh" ]]; then
@@ -652,6 +637,3 @@ EOF
     fi
 }
 
-# 自动初始化
-check_root
-set_timezone
