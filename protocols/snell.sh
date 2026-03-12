@@ -1,7 +1,7 @@
 #!/bin/bash
 # snell.sh - Snell 协议管理
 
-readonly MODULE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../lib" && pwd)"
+MODULE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../lib" && pwd)"
 source "${MODULE_DIR}/common.sh"
 source "${MODULE_DIR}/logging.sh"
 
