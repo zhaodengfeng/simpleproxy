@@ -110,10 +110,14 @@ install_hysteria2() {
     
     # 生成配置
     local listen_line="listen: :${hyport}"
-    [[ -n "$hop_start" && -n "$hop_end" ]] && listen_line="listen: :${hyport},:${hop_start}-${hop_end}"
     
     local hop_config=""
-    [[ -n "$hop_interval" ]] && hop_config="hopInterval: ${hop_interval}s"
+    if [[ -n "$hop_start" && -n "$hop_end" ]]; then
+        hop_config="portHopping:
+  range: ${hop_start}-${hop_end}"
+        [[ -n "$hop_interval" ]] && hop_config+="
+  interval: ${hop_interval}s"
+    fi
     
     if [[ "$hyinsecure" == "0" && -n "$hydomain" ]]; then
         # 使用 Let's Encrypt 证书
