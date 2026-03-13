@@ -111,12 +111,19 @@ install_hysteria2() {
     # 生成配置
     local listen_line="listen: :${hyport}"
     
-    local hop_config=""
+    # portHopping/hopInterval 是客户端配置，不写入服务端 config
+    # 服务端通过 iptables DNAT 将跳跃端口转发到主端口
     if [[ -n "$hop_start" && -n "$hop_end" ]]; then
-        hop_config="portHopping:
-  range: ${hop_start}-${hop_end}"
-        [[ -n "$hop_interval" ]] && hop_config+="
-  interval: ${hop_interval}s"
+        echo -e "${GREEN}配置 iptables 端口跳跃转发: ${hop_start}-${hop_end}/udp -> :${hyport}${NC}"
+        iptables -t nat -A PREROUTING -p udp --dport "${hop_start}:${hop_end}" -j REDIRECT --to-ports "${hyport}"
+        ip6tables -t nat -A PREROUTING -p udp --dport "${hop_start}:${hop_end}" -j REDIRECT --to-ports "${hyport}" 2>/dev/null || true
+        # 持久化
+        if command -v netfilter-persistent &>/dev/null; then
+            netfilter-persistent save
+        elif command -v iptables-save &>/dev/null; then
+            iptables-save > /etc/iptables/rules.v4 2>/dev/null || true
+            ip6tables-save > /etc/iptables/rules.v6 2>/dev/null || true
+        fi
     fi
     
     if [[ "$hyinsecure" == "0" && -n "$hydomain" ]]; then
@@ -136,7 +143,6 @@ masquerade:
 tls:
   cert: /etc/letsencrypt/live/${hydomain}/fullchain.pem
   key: /etc/letsencrypt/live/${hydomain}/privkey.pem
-${hop_config}
 EOF
     else
         # 使用自签名证书
@@ -155,7 +161,6 @@ masquerade:
 tls:
   cert: ${HY2_CONFIG_DIR}/server.crt
   key: ${HY2_CONFIG_DIR}/server.key
-${hop_config}
 EOF
         
         # 生成自签名证书 (有效期365天)
