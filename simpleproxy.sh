@@ -679,8 +679,6 @@ case "${1:-}" in
         echo "  sudo simpleproxy                         # 启动交互菜单"
         echo "  sudo simpleproxy --self-test             # 运行无副作用自检"
         echo ""
-        echo "注意: Reality / V2Ray / Hysteria2 / acme.sh 等上游安装器默认被阻止执行。"
-        echo "如需允许，请显式使用: ALLOW_REMOTE_INSTALL=1 sudo simpleproxy"
         exit 0
         ;;
 esac

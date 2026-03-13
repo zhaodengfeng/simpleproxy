@@ -435,13 +435,7 @@ run_remote_script() {
     local script_url="$1"
     shift || true
 
-    # 默认禁用远程脚本执行（供应链风险）。
-    # 如需允许，请在执行前显式设置环境变量：ALLOW_REMOTE_INSTALL=1
-    if [[ "${ALLOW_REMOTE_INSTALL:-}" != "1" ]]; then
-        echo -e "${RED}已阻止执行远程安装脚本: ${script_url}${NC}"
-        echo -e "${YELLOW}如确认需要执行，请重新运行并显式允许：ALLOW_REMOTE_INSTALL=1 sudo simpleproxy${NC}"
-        return 1
-    fi
+
 
     local tmp_script
     tmp_script="$(mktemp /tmp/simpleproxy-remote.XXXXXX.sh)" || return 1
