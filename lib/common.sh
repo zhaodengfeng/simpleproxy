@@ -201,17 +201,17 @@ gen_port() {
 # 网络工具函数
 # ============================================
 
-# 获取公网 IP (多源回退)
+# 获取公网 IPv4 地址 (强制 IPv4，多源回退)
 get_public_ip() {
     local ip=""
-    ip=$(curl -s --connect-timeout 5 https://www.cloudflare.com/cdn-cgi/trace 2>/dev/null | awk -F= '/^ip=/{print $2}' | tr -d '\r\n')
-    [[ -z "$ip" ]] && ip=$(curl -s --connect-timeout 5 https://ifconfig.co/ip 2>/dev/null | tr -d '\r\n')
-    [[ -z "$ip" ]] && ip=$(curl -s --connect-timeout 5 https://api.ipify.org 2>/dev/null | tr -d '\r\n')
-    [[ -z "$ip" ]] && ip=$(curl -s --connect-timeout 5 https://ifconfig.me 2>/dev/null | tr -d '\r\n')
-    [[ -z "$ip" ]] && ip=$(curl -s --connect-timeout 5 https://icanhazip.com 2>/dev/null | tr -d '\r\n')
-    
-    # 基本 IP 验证
-    if echo "$ip" | grep -qE '^([0-9]{1,3}\.){3}[0-9]{1,3}$|^([0-9a-fA-F:]+:+)+[0-9a-fA-F]+$'; then
+    ip=$(curl -4 -s --connect-timeout 5 https://www.cloudflare.com/cdn-cgi/trace 2>/dev/null | awk -F= '/^ip=/{print $2}' | tr -d '\r\n')
+    [[ -z "$ip" ]] && ip=$(curl -4 -s --connect-timeout 5 https://api.ipify.org 2>/dev/null | tr -d '\r\n')
+    [[ -z "$ip" ]] && ip=$(curl -4 -s --connect-timeout 5 https://ifconfig.co/ip 2>/dev/null | tr -d '\r\n')
+    [[ -z "$ip" ]] && ip=$(curl -4 -s --connect-timeout 5 https://ifconfig.me 2>/dev/null | tr -d '\r\n')
+    [[ -z "$ip" ]] && ip=$(curl -4 -s --connect-timeout 5 https://icanhazip.com 2>/dev/null | tr -d '\r\n')
+
+    # 基本 IPv4 格式验证
+    if echo "$ip" | grep -qE '^([0-9]{1,3}\.){3}[0-9]{1,3}$'; then
         echo "$ip"
     else
         echo ""
