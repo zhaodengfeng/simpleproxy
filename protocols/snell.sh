@@ -44,7 +44,11 @@ install_snell() {
     # 生成 PSK
     local snell_psk
     snell_psk=$(gen_random 32)
-    
+
+    # DNS 配置
+    echo ""
+    read -t 15 -p "请输入 DNS 服务器(多个用逗号分隔，回车跳过使用系统默认，例: 1.1.1.1, 8.8.8.8): " snell_dns_input || true
+
     # 检测架构并下载
     local arch
     arch=$(uname -m)
@@ -103,12 +107,13 @@ install_snell() {
     mkdir -p "$SNELL_CONFIG_DIR"
     
     # 创建配置文件
-    cat > "$SNELL_CONFIG_FILE" <<EOF
-[snell-server]
-listen = 0.0.0.0:${snell_port}
-psk = ${snell_psk}
-ipv6 = false
-EOF
+    {
+        echo "[snell-server]"
+        echo "listen = 0.0.0.0:${snell_port}"
+        echo "psk = ${snell_psk}"
+        echo "ipv6 = false"
+        [[ -n "$snell_dns_input" ]] && echo "dns = ${snell_dns_input}"
+    } > "$SNELL_CONFIG_FILE"
     
     chmod 600 "$SNELL_CONFIG_FILE"
     
