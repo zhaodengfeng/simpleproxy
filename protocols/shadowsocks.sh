@@ -323,7 +323,7 @@ status_shadowsocks() {
     # 显示配置信息
     if [[ -f "$SS_CONFIG_FILE" ]]; then
         echo -e "${BLUE}配置信息:${NC}"
-        cat "$SS_CONFIG_FILE" | grep -E '"server_port"|"method"' || true
+        grep -E '"server_port"|"method"' "$SS_CONFIG_FILE" || true
     fi
     
     # 检查端口监听

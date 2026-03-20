@@ -12,7 +12,8 @@ calc_sha256(){
 # 验证下载的文件
 verify_download(){
     local file="$1" expected="$2"
-    local actual=$(calc_sha256 "$file")
+    local actual
+    actual=$(calc_sha256 "$file")
     [[ "$actual" == "$expected" ]]
 }
 

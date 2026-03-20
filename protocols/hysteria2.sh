@@ -255,16 +255,17 @@ EOF
 upgrade_hysteria2() {
     echo -e "${BLUE}正在升级 Hysteria2...${NC}"
     
-    local bak
+    local bak hysteria_bin
     bak=$(backup_upgrade_context "hysteria2")
+    hysteria_bin=$(command -v hysteria 2>/dev/null || echo "/usr/local/bin/hysteria")
     cp -f "$HY2_CONFIG_FILE" "$bak/config.yaml" 2>/dev/null || true
-    cp -f "$(command -v hysteria)" "$bak/hysteria" 2>/dev/null || true
+    cp -f "$hysteria_bin" "$bak/hysteria" 2>/dev/null || true
     
     systemctl stop "$HY2_SERVICE"
     
     run_remote_script "https://get.hy2.sh/" || {
         rollback_file_if_needed "$bak/config.yaml" "$HY2_CONFIG_FILE"
-        rollback_file_if_needed "$bak/hysteria" "$(command -v hysteria)"
+        rollback_file_if_needed "$bak/hysteria" "$hysteria_bin"
         return 1
     }
     

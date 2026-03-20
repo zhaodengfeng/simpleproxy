@@ -6,7 +6,7 @@
 set -euo pipefail
 
 # Script version (format: YYMMDD.N)
-SCRIPT_VERSION="260224a"
+SCRIPT_VERSION="260320"
 
 # Color codes
 readonly RED='\033[0;31m'
@@ -435,7 +435,11 @@ run_remote_script() {
     local script_url="$1"
     shift || true
 
-
+    if [[ "${ALLOW_REMOTE_INSTALL:-0}" != "1" ]]; then
+        echo -e "${RED}远程脚本执行被禁止: ${script_url}${NC}"
+        echo -e "${YELLOW}如需允许，请使用: ALLOW_REMOTE_INSTALL=1 sudo simpleproxy${NC}"
+        return 1
+    fi
 
     local tmp_script
     tmp_script="$(mktemp /tmp/simpleproxy-remote.XXXXXX.sh)" || return 1

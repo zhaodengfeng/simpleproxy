@@ -1,7 +1,7 @@
 #!/bin/bash
 # SIMPLEPROXY - A Multi-Protocol Proxy Installer
 # Supports: Shadowsocks-rust, Reality, Hysteria2, V2Ray+TLS+WS, Snell
-# Version: 260224a
+# Version: 260320
 #
 # 重构版本: 模块化设计，protocols/ 目录包含各协议实现
 

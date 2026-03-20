@@ -202,12 +202,13 @@ show_completion() {
     echo ""
 }
 
+# 设置时区
+set_timezone() {
+    timedatectl set-timezone Asia/Shanghai 2>/dev/null || true
+}
+
 # 主函数
 main() {
-    set_timezone() {
-        timedatectl set-timezone Asia/Shanghai 2>/dev/null || true
-    }
-
     echo -e "${CYAN}═══════════════════════════════════════════════════════${NC}"
     echo -e "${CYAN}       SimpleProxy 一键安装脚本${NC}"
     echo -e "${CYAN}═══════════════════════════════════════════════════════${NC}"
