@@ -20,19 +20,19 @@ install_reality() {
     
     # 请求端口
     echo ""
-    read -t 15 -p "请输入端口号(回车或等待15秒随机生成): " rport_input || true
+    read -t 15 -p "请输入端口号(回车或等待15秒默认为443): " rport_input || true
     local rport
     if [[ -n "$rport_input" ]]; then
         rport=$rport_input
     else
-        rport=$(gen_port 20000 65000)
-        echo -e "${GREEN}使用随机端口: ${rport}${NC}"
+        rport=443
+        echo -e "${GREEN}使用默认端口: ${rport}${NC}"
     fi
     
     # 验证端口
     if ! validate_port "$rport"; then
-        rport=$(gen_port 20000 65000)
-        echo -e "${YELLOW}端口无效，使用随机端口: ${rport}${NC}"
+        rport=443
+        echo -e "${YELLOW}端口无效，使用默认端口: ${rport}${NC}"
     fi
     
     # 检查端口占用
