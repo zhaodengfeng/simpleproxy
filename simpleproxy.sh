@@ -636,8 +636,8 @@ main() {
                 ;;
             9)
                 echo -e "${RED}警告: 这将卸载所有服务和数据!${NC}"
-                read -p "确定要继续? (yes/no): " confirm
-                if [[ "$confirm" == "yes" ]]; then
+                read -p "确定要继续? (y/yes): " confirm
+                if [[ "$confirm" =~ ^[Yy]([Ee][Ss])?$ ]]; then
                     call_protocol shadowsocks uninstall 2>/dev/null || true
                     call_protocol reality uninstall 2>/dev/null || true
                     call_protocol hysteria2 uninstall 2>/dev/null || true
