@@ -638,7 +638,11 @@ main() {
                 echo -e "${RED}警告: 这将卸载所有服务和数据!${NC}"
                 read -p "确定要继续? (yes/no): " confirm
                 if [[ "$confirm" == "yes" ]]; then
-                    handle_uninstall
+                    call_protocol shadowsocks uninstall 2>/dev/null || true
+                    call_protocol reality uninstall 2>/dev/null || true
+                    call_protocol hysteria2 uninstall 2>/dev/null || true
+                    call_protocol v2ray uninstall 2>/dev/null || true
+                    call_protocol snell uninstall 2>/dev/null || true
                     rm -rf "$STATE_DIR" "$EXPORT_DIR" "$BACKUP_ROOT"
                     echo -e "${GREEN}已完全卸载${NC}"
                 fi
