@@ -38,22 +38,6 @@ sudo simpleproxy
 sudo sp
 ```
 
-## Remote installer execution (important)
-
-For supply-chain safety, **remote installer scripts are blocked by default** (e.g. `acme.sh`, Xray installer, Hysteria installer).
-
-To explicitly allow them:
-
-```bash
-ALLOW_REMOTE_INSTALL=1 sudo simpleproxy
-```
-
-Install + first run (allowed):
-
-```bash
-bash <(curl -fsSL https://raw.githubusercontent.com/zhaodengfeng/simpleproxy/main/install.sh) \
-  && ALLOW_REMOTE_INSTALL=1 sudo simpleproxy
-```
 
 ## AI shunt (SS upstream)
 
@@ -128,7 +112,6 @@ Note: protocol scripts compute and lock their `lib/` path internally (no `MODULE
 - Private keys are set to **600** (certs typically **644**)
 - AI upstream config is not sourced; it is parsed
 - AI shunt changes now back up Xray configs and roll back automatically on validation failure
-- Remote installer execution is opt-in via `ALLOW_REMOTE_INSTALL=1`
 - Temporary downloads prefer `mktemp` to reduce `/tmp` race/overwrite risk
 
 ## License
