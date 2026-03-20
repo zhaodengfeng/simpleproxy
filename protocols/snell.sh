@@ -51,9 +51,9 @@ install_snell() {
     local snell_arch="amd64"
     case $arch in
         x86_64) snell_arch="amd64" ;;
-        aarch64|arm64) snell_arch="arm64" ;;
-        armv7l) snell_arch="armv7" ;;
-        i386|i686) snell_arch="386" ;;
+        aarch64) snell_arch="aarch64" ;;
+        armv7l) snell_arch="armv7l" ;;
+        i386|i686) snell_arch="i386" ;;
         *) 
             echo -e "${RED}不支持的架构: ${arch}${NC}"
             return 1
@@ -62,12 +62,12 @@ install_snell() {
     
     echo -e "${BLUE}下载 Snell (架构: ${snell_arch})...${NC}"
     
-    # 获取最新版本
+    # 获取最新版本 (从 passeway/Snell 镜像仓库获取版本号，二进制从 dl.nssurge.com 下载)
     local snell_version
-    snell_version=$(curl -s "https://api.github.com/repos/surge-networks/snell/releases/latest" | grep '"tag_name":' | sed -E 's/.*"v([0-9.]+)".*/\1/')
-    [[ -z "$snell_version" ]] && snell_version="4.1.1"
+    snell_version=$(curl -s "https://api.github.com/repos/passeway/Snell/releases/latest" | grep '"tag_name":' | sed -E 's/.*"v([0-9.]+)".*/\1/')
+    [[ -z "$snell_version" ]] && snell_version="5.0.1"
     
-    local download_url="https://github.com/surge-networks/snell/releases/download/v${snell_version}/snell-server-v${snell_version}-linux-${snell_arch}.zip"
+    local download_url="https://dl.nssurge.com/snell/snell-server-v${snell_version}-linux-${snell_arch}.zip"
     
     # 创建安全临时目录
     local tmp_dir
@@ -153,11 +153,11 @@ EOF
 服务器地址: ${server_ip}
 端口: ${snell_port}
 PSK: ${snell_psk}
-协议版本: v4
+协议版本: v5
 
 Surge 配置示例:
 [Proxy]
-Snell = snell, ${server_ip}, ${snell_port}, psk=${snell_psk}, version=4
+Snell = snell, ${server_ip}, ${snell_port}, psk=${snell_psk}, version=5
 EOF
     chmod 600 "$SNELL_CLIENT_FILE"
     
@@ -189,14 +189,16 @@ upgrade_snell() {
     arch=$(uname -m)
     local snell_arch="amd64"
     case $arch in
-        aarch64|arm64) snell_arch="arm64" ;;
+        aarch64) snell_arch="aarch64" ;;
+        armv7l) snell_arch="armv7l" ;;
+        i386|i686) snell_arch="i386" ;;
     esac
     
     local snell_version
-    snell_version=$(curl -s "https://api.github.com/repos/surge-networks/snell/releases/latest" | grep '"tag_name":' | sed -E 's/.*"v([0-9.]+)".*/\1/')
-    [[ -z "$snell_version" ]] && snell_version="4.1.1"
+    snell_version=$(curl -s "https://api.github.com/repos/passeway/Snell/releases/latest" | grep '"tag_name":' | sed -E 's/.*"v([0-9.]+)".*/\1/')
+    [[ -z "$snell_version" ]] && snell_version="5.0.1"
     
-    local download_url="https://github.com/surge-networks/snell/releases/download/v${snell_version}/snell-server-v${snell_version}-linux-${snell_arch}.zip"
+    local download_url="https://dl.nssurge.com/snell/snell-server-v${snell_version}-linux-${snell_arch}.zip"
 
     local tmp_dir
     tmp_dir=$(mktemp -d /tmp/simpleproxy-snell-upg.XXXXXX) || return 1
