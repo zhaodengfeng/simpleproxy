@@ -48,7 +48,7 @@ install_reality() {
     rshortid=$(openssl rand -hex 4)
     local server_ip
     server_ip=$(get_public_ip)
-    local rsni="www.microsoft.com"
+    local rsni="s3.amazonaws.com"
     local rdomain=""
     local client_sni="${rsni}"
     local xray_installed=false
