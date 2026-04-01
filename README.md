@@ -59,11 +59,12 @@ SimpleProxy can route traffic matching **AI/OpenAI domain rules** to an **upstre
 
 [管理选项]
   6. 卸载服务
-  7. 查看状态
-  8. 健康检查
-  9. 完全卸载
- 10. 配置 AI 分流 (SS 上游)
- 11. 关闭 AI 分流
+  7. 升级服务
+  8. 查看状态
+  9. 健康检查
+ 10. 完全卸载
+ 11. 配置 AI 分流 (SS 上游)
+ 12. 关闭 AI 分流
   0. 退出
 ```
 

@@ -139,12 +139,13 @@ server {
 }
 
 server {
-    listen ${GET_PORT} ssl http2;
-    listen [::]:${GET_PORT} ssl http2;
+    listen ${GET_PORT} ssl;
+    listen [::]:${GET_PORT} ssl;
+    http2 on;
     server_name ${DOMAIN};
     ssl_protocols TLSv1.2 TLSv1.3;
-    ssl_ciphers ECDHE-RSA-AES128-GCM-SHA256:HIGH:!aNULL:!MD5:!RC4:!DHE;
-    ssl_prefer_server_ciphers on;
+    ssl_ciphers ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305;
+    ssl_prefer_server_ciphers off;
     ssl_certificate /etc/letsencrypt/live/${DOMAIN}/fullchain.pem;
     ssl_certificate_key /etc/letsencrypt/live/${DOMAIN}/privkey.pem;
 
@@ -343,17 +344,26 @@ upgrade_v2ray() {
 uninstall_v2ray() {
     log_info "开始卸载 V2Ray"
     echo -e "${BLUE}正在卸载 V2Ray...${NC}"
-    
+
     systemctl stop "$V2RAY_SERVICE" 2>/dev/null || true
     systemctl disable "$V2RAY_SERVICE" 2>/dev/null || true
     rm -f "/etc/systemd/system/${V2RAY_SERVICE}"
     rm -f "$V2RAY_CONFIG"
     rm -f "$V2RAY_CLIENT"
-    
+
+    # 清理 Nginx 配置
+    if [[ -f /etc/nginx/conf.d/simpleproxy.conf ]]; then
+        rm -f /etc/nginx/conf.d/simpleproxy.conf
+        if systemctl is-active --quiet nginx 2>/dev/null; then
+            systemctl reload nginx 2>/dev/null || true
+        fi
+        echo -e "${GREEN}已清理 Nginx 配置${NC}"
+    fi
+
     mark_uninstalled v2ray
     rm -f "$EXPORT_DIR/v2ray.json"
     systemctl daemon-reload
-    
+
     echo -e "${GREEN}V2Ray 已卸载${NC}"
 }
 

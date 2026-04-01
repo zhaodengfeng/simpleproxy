@@ -90,12 +90,11 @@ detect_os() {
 # ============================================
 
 # 验证域名格式 (RFC 1123 兼容)
+# 规则: 仅允许字母/数字/连字符，各标签以字母数字开头结尾，最长253字符
 validate_domain() {
     local domain="$1"
     [[ -z "$domain" ]] && return 1
     [[ ${#domain} -gt 253 ]] && return 1
-    # 检查不允许的模式: 以-开头/结尾, 包含.., 以.开头/结尾
-    [[ "$domain" =~ (^-)|(-$)|(\.\.)|(^\.)(\.?$) ]] && return 1
     [[ "$domain" =~ ^[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$ ]]
 }
 
@@ -188,13 +187,84 @@ gen_port() {
     local min="${1:-10000}"
     local max="${2:-65535}"
     local port
-    while true; do
+    local attempts=0
+    local max_attempts=1000
+    while [[ $attempts -lt $max_attempts ]]; do
         port=$(shuf -i "$min-$max" -n 1)
         if ! has_listening_port "$port"; then
             echo "$port"
             return 0
         fi
+        attempts=$((attempts + 1))
     done
+    echo -e "${RED}错误: 在 ${min}-${max} 范围内未找到可用端口${NC}" >&2
+    return 1
+}
+
+# ============================================
+# 交互式端口输入 (公共)
+# ============================================
+
+# 交互式获取端口，支持默认值和随机生成
+# 用法: prompt_port [default|random] [min] [max]
+#   default: 指定默认端口号，或 "random" 表示随机生成
+prompt_port() {
+    local default="${1:-random}"
+    local min="${2:-20000}"
+    local max="${3:-65000}"
+    local port_input port
+
+    read -t 15 -p "请输入端口号(回车或等待15秒${default:+默认${default}}): " port_input || true
+
+    if [[ -n "$port_input" ]]; then
+        port=$port_input
+    elif [[ "$default" == "random" ]]; then
+        port=$(gen_port "$min" "$max") || return 1
+        echo -e "${GREEN}使用随机端口: ${port}${NC}"
+    else
+        port=$default
+        echo -e "${GREEN}使用默认端口: ${port}${NC}"
+    fi
+
+    if ! validate_port "$port"; then
+        port=$(gen_port "$min" "$max") || return 1
+        echo -e "${YELLOW}端口无效，使用随机端口: ${port}${NC}"
+    fi
+
+    if has_listening_port "$port"; then
+        echo -e "${RED}错误: 端口 ${port} 已被占用${NC}"
+        return 1
+    fi
+
+    echo "$port"
+}
+
+# ============================================
+# 服务启动等待 (公共)
+# ============================================
+
+# 等待 systemd 服务启动，带重试
+# 用法: wait_service_start <service_name> [max_retries] [sleep_seconds]
+wait_service_start() {
+    local service="$1"
+    local max_retries="${2:-3}"
+    local sleep_sec="${3:-3}"
+    local retry_count=0
+
+    while [[ $retry_count -lt $max_retries ]]; do
+        if systemctl is-active --quiet "$service"; then
+            echo -e "${GREEN}✓ ${service} 已成功启动${NC}"
+            return 0
+        fi
+        retry_count=$((retry_count + 1))
+        if [[ $retry_count -lt $max_retries ]]; then
+            echo -e "${YELLOW}等待服务启动... (${retry_count}/${max_retries})${NC}"
+            sleep "$sleep_sec"
+        fi
+    done
+
+    echo -e "${RED}✗ ${service} 启动失败${NC}"
+    return 1
 }
 
 # ============================================
@@ -488,7 +558,15 @@ install_common_deps() {
 # ============================================
 
 set_timezone() {
-    timedatectl set-timezone Asia/Shanghai 2>/dev/null || true
+    local current_tz
+    current_tz=$(timedatectl show -p Timezone --value 2>/dev/null || true)
+    if [[ -n "$current_tz" && "$current_tz" != "Etc/UTC" && "$current_tz" != "UTC" ]]; then
+        return 0
+    fi
+    read -t 10 -p "当前时区为 ${current_tz:-未知}，是否设置为 Asia/Shanghai? (Y/n): " tz_confirm || true
+    if [[ ! "$tz_confirm" =~ ^[Nn]$ ]]; then
+        timedatectl set-timezone Asia/Shanghai 2>/dev/null || true
+    fi
 }
 
 # ============================================
@@ -498,7 +576,10 @@ set_timezone() {
 install_acme() {
     if [[ ! -f "$HOME/.acme.sh/acme.sh" ]]; then
         echo -e "${BLUE}Installing acme.sh...${NC}"
-        run_remote_script "https://get.acme.sh/" -s email=admin@localhost.com || {
+        local acme_email=""
+        read -t 30 -p "请输入用于 Let's Encrypt 证书通知的邮箱(回车跳过): " acme_email || true
+        acme_email="${acme_email:-noreply@example.com}"
+        run_remote_script "https://get.acme.sh/" -s email="$acme_email" || {
             echo -e "${RED}acme.sh 安装失败${NC}"
             return 1
         }

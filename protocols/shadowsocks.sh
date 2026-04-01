@@ -10,7 +10,7 @@ source "${MODULE_DIR}/logging.sh"
 # 配置路径
 readonly SS_CONFIG_DIR="/etc/shadowsocks"
 readonly SS_CONFIG_FILE="${SS_CONFIG_DIR}/config.json"
-readonly SS_CLIENT_FILE="${SS_CONFIG_DIR}/client.json"
+readonly SS_CLIENT_FILE="${SS_CONFIG_DIR}/client.txt"
 readonly SS_SERVICE="shadowsocks.service"
 
 # ============================================
@@ -94,7 +94,7 @@ install_shadowsocks() {
     # 获取最新版本
     echo -e "${BLUE}获取 Shadowsocks-rust 最新版本...${NC}"
     local ssrust_version
-    ssrust_version=$(curl -sIL "https://github.com/shadowsocks/shadowsocks-rust/releases/latest" | grep -i location | sed -E 's/.*tag\/(v[0-9.]+).*/\1/')
+    ssrust_version=$(curl -s "https://api.github.com/repos/shadowsocks/shadowsocks-rust/releases/latest" | grep '"tag_name"' | sed -E 's/.*"(v[0-9.]+)".*/\1/')
     [[ -z "$ssrust_version" ]] && ssrust_version="v1.24.0"
     echo -e "${GREEN}版本: ${ssrust_version}${NC}"
     
@@ -239,9 +239,9 @@ upgrade_shadowsocks() {
     systemctl stop "$SS_SERVICE"
     
     local ssrust_version
-    ssrust_version=$(curl -sIL "https://github.com/shadowsocks/shadowsocks-rust/releases/latest" | grep -i location | sed -E 's/.*tag\/(v[0-9.]+).*/\1/')
+    ssrust_version=$(curl -s "https://api.github.com/repos/shadowsocks/shadowsocks-rust/releases/latest" | grep '"tag_name"' | sed -E 's/.*"(v[0-9.]+)".*/\1/')
     [[ -z "$ssrust_version" ]] && ssrust_version="v1.24.0"
-    
+
     local arch
     arch=$(uname -m)
     local download_arch="x86_64-unknown-linux-gnu"

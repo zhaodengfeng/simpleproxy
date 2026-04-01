@@ -160,11 +160,12 @@ show_menu() {
     echo ""
     echo -e "  ${BLUE}[管理选项]${NC}"
     echo "    6. 卸载服务"
-    echo "    7. 查看状态"
-    echo "    8. 健康检查"
-    echo "    9. 完全卸载"
-    echo "   10. 配置 AI 分流 (SS 上游)"
-    echo "   11. 关闭 AI 分流"
+    echo "    7. 升级服务"
+    echo "    8. 查看状态"
+    echo "    9. 健康检查"
+    echo "   10. 完全卸载"
+    echo "   11. 配置 AI 分流 (SS 上游)"
+    echo "   12. 关闭 AI 分流"
     echo ""
     echo "    0. 退出"
     echo ""
@@ -208,6 +209,28 @@ handle_uninstall() {
             call_protocol v2ray uninstall 2>/dev/null || true
             call_protocol snell uninstall 2>/dev/null || true
             ;;
+        0) return ;;
+        *) echo -e "${RED}无效选项${NC}" ;;
+    esac
+}
+
+handle_upgrade() {
+    echo ""
+    echo -e "${YELLOW}选择要升级的服务:${NC}"
+    echo "  1. Shadowsocks-rust"
+    echo "  2. Reality"
+    echo "  3. Hysteria2"
+    echo "  4. V2Ray"
+    echo "  5. Snell"
+    echo "  0. 取消"
+    read -p "请选择: " upgrade_choice
+
+    case $upgrade_choice in
+        1) call_protocol shadowsocks upgrade ;;
+        2) call_protocol reality upgrade ;;
+        3) call_protocol hysteria2 upgrade ;;
+        4) call_protocol v2ray upgrade ;;
+        5) call_protocol snell upgrade ;;
         0) return ;;
         *) echo -e "${RED}无效选项${NC}" ;;
     esac
@@ -625,16 +648,21 @@ main() {
                 read -p "按回车键继续..."
                 ;;
             7)
-                handle_status || true
+                handle_upgrade || true
                 echo ""
                 read -p "按回车键继续..."
                 ;;
             8)
-                health_check || true
+                handle_status || true
                 echo ""
                 read -p "按回车键继续..."
                 ;;
             9)
+                health_check || true
+                echo ""
+                read -p "按回车键继续..."
+                ;;
+            10)
                 echo -e "${RED}警告: 这将卸载所有服务和数据!${NC}"
                 read -p "确定要继续? (y/yes): " confirm
                 if [[ "$confirm" =~ ^[Yy]([Ee][Ss])?$ ]]; then
@@ -644,17 +672,20 @@ main() {
                     call_protocol v2ray uninstall 2>/dev/null || true
                     call_protocol snell uninstall 2>/dev/null || true
                     rm -rf "$STATE_DIR" "$EXPORT_DIR" "$BACKUP_ROOT"
+                    # 清理安装目录和 symlink
+                    rm -f /usr/local/bin/simpleproxy /usr/local/bin/sp
                     echo -e "${GREEN}已完全卸载${NC}"
+                    echo -e "${YELLOW}提示: 安装目录 ${SCRIPT_DIR} 需手动删除 (rm -rf ${SCRIPT_DIR})${NC}"
                 fi
                 echo ""
                 read -p "按回车键继续..."
                 ;;
-            10)
+            11)
                 apply_ai_shunt || true
                 echo ""
                 read -p "按回车键继续..."
                 ;;
-            11)
+            12)
                 disable_ai_shunt || true
                 echo ""
                 read -p "按回车键继续..."

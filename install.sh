@@ -61,32 +61,44 @@ detect_os() {
     fi
 }
 
-# 安装依赖
+# 安装依赖（仅安装缺失的）
 install_dependencies() {
-    info "正在安装依赖..."
+    local deps=("curl" "git" "openssl" "wget" "unzip" "python3" "socat")
+    local missing=()
 
-    local deps=("curl" "git" "openssl" "wget" "unzip" "python3" "socat" "net-tools")
+    for cmd in "${deps[@]}"; do
+        command -v "$cmd" &>/dev/null || missing+=("$cmd")
+    done
+    # net-tools 通过 netstat 检测
+    command -v netstat &>/dev/null || missing+=("net-tools")
+
+    if [[ ${#missing[@]} -eq 0 ]]; then
+        info "所有依赖已安装，跳过"
+        return 0
+    fi
+
+    info "正在安装缺失依赖: ${missing[*]}..."
 
     case $OS in
         ubuntu|debian)
             apt-get update -qq
-            apt-get install -y -qq "${deps[@]}" iproute2 cron bash-completion
+            apt-get install -y -qq "${missing[@]}" iproute2 cron bash-completion
             ;;
         centos|rhel|fedora|rocky|almalinux)
             if command -v dnf &>/dev/null; then
-                dnf install -y -q "${deps[@]}" iproute cronie bash-completion
+                dnf install -y -q "${missing[@]}" iproute cronie bash-completion
             else
-                yum install -y -q "${deps[@]}" iproute cronie bash-completion
+                yum install -y -q "${missing[@]}" iproute cronie bash-completion
             fi
             ;;
         arch|manjaro)
-            pacman -Sy --noconfirm --quiet "${deps[@]}" iproute2 cronie bash-completion
+            pacman -Sy --noconfirm --quiet "${missing[@]}" iproute2 cronie bash-completion
             ;;
         alpine)
-            apk add --no-cache "${deps[@]}" iproute2 dcron bash-completion
+            apk add --no-cache "${missing[@]}" iproute2 dcron bash-completion
             ;;
         *)
-            warn "未知操作系统，请手动安装: ${deps[*]} iproute(2) cron/cronie"
+            warn "未知操作系统，请手动安装: ${missing[*]} iproute(2) cron/cronie"
             ;;
     esac
 
@@ -202,9 +214,17 @@ show_completion() {
     echo ""
 }
 
-# 设置时区
+# 设置时区（仅在未配置时提示）
 set_timezone() {
-    timedatectl set-timezone Asia/Shanghai 2>/dev/null || true
+    local current_tz
+    current_tz=$(timedatectl show -p Timezone --value 2>/dev/null || true)
+    if [[ -n "$current_tz" && "$current_tz" != "Etc/UTC" && "$current_tz" != "UTC" ]]; then
+        return 0
+    fi
+    read -t 10 -p "当前时区为 ${current_tz:-未知}，是否设置为 Asia/Shanghai? (Y/n): " tz_confirm || true
+    if [[ ! "$tz_confirm" =~ ^[Nn]$ ]]; then
+        timedatectl set-timezone Asia/Shanghai 2>/dev/null || true
+    fi
 }
 
 # 主函数

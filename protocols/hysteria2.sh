@@ -9,7 +9,7 @@ source "${MODULE_DIR}/logging.sh"
 # 配置路径
 readonly HY2_CONFIG_DIR="/etc/hysteria"
 readonly HY2_CONFIG_FILE="${HY2_CONFIG_DIR}/config.yaml"
-readonly HY2_CLIENT_FILE="${HY2_CONFIG_DIR}/hyclient.json"
+readonly HY2_CLIENT_FILE="${HY2_CONFIG_DIR}/hyclient.txt"
 readonly HY2_SERVICE="hysteria-server.service"
 
 # ============================================
@@ -279,17 +279,36 @@ upgrade_hysteria2() {
 uninstall_hysteria2() {
     log_info "开始卸载 Hysteria2"
     echo -e "${BLUE}正在卸载 Hysteria2...${NC}"
-    
+
     systemctl stop "$HY2_SERVICE" 2>/dev/null || true
     systemctl disable "$HY2_SERVICE" 2>/dev/null || true
+
+    # 清理端口跳跃 iptables 规则
+    if [[ -f "$HY2_CONFIG_FILE" ]]; then
+        local hyport
+        hyport=$(grep -E '^listen:' "$HY2_CONFIG_FILE" 2>/dev/null | grep -oE '[0-9]+' | head -1)
+        if [[ -n "$hyport" ]]; then
+            # 删除所有指向该端口的 PREROUTING REDIRECT 规则
+            while iptables -t nat -D PREROUTING -p udp -j REDIRECT --to-ports "$hyport" 2>/dev/null; do :; done
+            while ip6tables -t nat -D PREROUTING -p udp -j REDIRECT --to-ports "$hyport" 2>/dev/null; do :; done
+            # 持久化
+            if command -v netfilter-persistent &>/dev/null; then
+                netfilter-persistent save 2>/dev/null || true
+            elif command -v iptables-save &>/dev/null; then
+                iptables-save > /etc/iptables/rules.v4 2>/dev/null || true
+                ip6tables-save > /etc/iptables/rules.v6 2>/dev/null || true
+            fi
+        fi
+    fi
+
     rm -f /usr/local/bin/hysteria
     rm -rf "$HY2_CONFIG_DIR"
     rm -f "/etc/systemd/system/${HY2_SERVICE}"
-    
+
     mark_uninstalled hysteria2
     rm -f "$EXPORT_DIR/hysteria2.json"
     systemctl daemon-reload
-    
+
     echo -e "${GREEN}Hysteria2 已卸载${NC}"
 }
 

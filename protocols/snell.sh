@@ -48,6 +48,10 @@ install_snell() {
     # DNS 配置
     echo ""
     read -t 15 -p "请输入 DNS 服务器(多个用逗号分隔，回车跳过使用系统默认，例: 1.1.1.1, 8.8.8.8): " snell_dns_input || true
+    if [[ -n "$snell_dns_input" ]] && [[ "$snell_dns_input" =~ [$'\n'$'\r'$'\t'] ]]; then
+        echo -e "${RED}DNS 输入包含非法控制字符${NC}"
+        return 1
+    fi
 
     # 检测架构并下载
     local arch
@@ -66,10 +70,14 @@ install_snell() {
     
     echo -e "${BLUE}下载 Snell (架构: ${snell_arch})...${NC}"
     
-    # 获取最新版本 (从 passeway/Snell 镜像仓库获取版本号，二进制从 dl.nssurge.com 下载)
+    # 获取最新版本 (从 Surge KB release notes 页面解析)
     local snell_version
-    snell_version=$(curl -s "https://api.github.com/repos/passeway/Snell/releases/latest" | grep '"tag_name":' | sed -E 's/.*"v([0-9.]+)".*/\1/')
-    [[ -z "$snell_version" ]] && snell_version="5.0.1"
+    snell_version=$(curl -s "https://kb.nssurge.com/surge-knowledge-base/release-notes/snell" \
+        | grep -oE 'snell-server-v[0-9]+\.[0-9]+\.[0-9]+' \
+        | sed 's/snell-server-v//' \
+        | sort -t. -k1,1n -k2,2n -k3,3n \
+        | tail -1)
+    [[ -z "$snell_version" ]] && snell_version="4.1.1"
     
     local download_url="https://dl.nssurge.com/snell/snell-server-v${snell_version}-linux-${snell_arch}.zip"
     
@@ -200,8 +208,12 @@ upgrade_snell() {
     esac
     
     local snell_version
-    snell_version=$(curl -s "https://api.github.com/repos/passeway/Snell/releases/latest" | grep '"tag_name":' | sed -E 's/.*"v([0-9.]+)".*/\1/')
-    [[ -z "$snell_version" ]] && snell_version="5.0.1"
+    snell_version=$(curl -s "https://kb.nssurge.com/surge-knowledge-base/release-notes/snell" \
+        | grep -oE 'snell-server-v[0-9]+\.[0-9]+\.[0-9]+' \
+        | sed 's/snell-server-v//' \
+        | sort -t. -k1,1n -k2,2n -k3,3n \
+        | tail -1)
+    [[ -z "$snell_version" ]] && snell_version="4.1.1"
     
     local download_url="https://dl.nssurge.com/snell/snell-server-v${snell_version}-linux-${snell_arch}.zip"
 
