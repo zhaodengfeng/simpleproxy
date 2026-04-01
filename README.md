@@ -1,36 +1,43 @@
 # SimpleProxy
 
-SimpleProxy is a modular Linux script to install and manage common proxy protocols with an interactive menu.
+A modular Bash script for installing and managing multiple proxy protocols on Linux servers via an interactive menu.
+
+## Supported Protocols
+
+| Protocol | Implementation | Default Port |
+|----------|---------------|-------------|
+| Shadowsocks-rust | ss-server (latest release from GitHub) | User-defined |
+| VLESS + Reality | Xray-core | 443 |
+| Hysteria2 | hysteria-server | User-defined |
+| V2Ray + TLS + WebSocket | Xray-core + Nginx | 443 |
+| Snell | snell-server (version fetched from Surge KB) | User-defined |
 
 ## Features
 
-- Modular architecture (`lib/` + `protocols/`)
-- Interactive menu + health checks
-- SSL automation + basic firewall integration
-- AI shunt: route AI/OpenAI domains to an upstream Shadowsocks server
-
-## Supported protocols
-
-- Shadowsocks-rust
-- VLESS + Reality (Xray)
-- Hysteria2
-- V2Ray + TLS + WebSocket (Xray + Nginx)
-- Snell
+- **Modular architecture** — shared libraries in `lib/`, protocol-specific modules in `protocols/`
+- **Interactive menu** — install, uninstall, upgrade, and monitor all protocols from a single interface
+- **Health checks** — service status, listening ports, certificate expiration tracking
+- **SSL automation** — ACME certificate issuance and renewal
+- **AI shunt** — route AI/OpenAI domain traffic to an upstream Shadowsocks server using ACL4SSR rules (`AI.list` + `OpenAi.list`)
+- **Self-test mode** — validate file integrity and Bash syntax without making system changes
+- **Auto-rollback** — configuration changes are backed up and rolled back on validation failure
+- **Snell DNS** — optional custom DNS configuration during Snell installation (supports IP addresses and DoH/DoT URLs)
+- **Upgrade support** — in-place upgrade for each protocol, fetching the latest version from upstream
 
 ## Requirements
 
-- Linux (Ubuntu/Debian/CentOS/RHEL)
+- Linux (Ubuntu / Debian / CentOS / RHEL)
 - Root privileges
-- Public IP
+- Public IP address
 - `git`, `curl`, `wget`
 
-## Install
+## Installation
 
 ```bash
 bash <(curl -fsSL https://raw.githubusercontent.com/zhaodengfeng/simpleproxy/main/install.sh)
 ```
 
-After installation, run:
+After installation:
 
 ```bash
 sudo simpleproxy
@@ -38,82 +45,82 @@ sudo simpleproxy
 sudo sp
 ```
 
-
-## AI shunt (SS upstream)
-
-SimpleProxy can route traffic matching **AI/OpenAI domain rules** to an **upstream Shadowsocks** server.
-
-- Rule source: ACL4SSR `AI.list` + `OpenAi.list`
-- You will be prompted for upstream SS: `server/port/method/password`
-- Safety: upstream config is parsed as fixed `KEY=VALUE` (no `source` execution)
-
-### Menu Options
+## Menu
 
 ```
-[安装选项]
+[Install]
   1. Shadowsocks-rust
   2. Reality (VLESS)
   3. Hysteria2
   4. V2Ray + TLS + WebSocket
   5. Snell
 
-[管理选项]
-  6. 卸载服务
-  7. 升级服务
-  8. 查看状态
-  9. 健康检查
- 10. 完全卸载
- 11. 配置 AI 分流 (SS 上游)
- 12. 关闭 AI 分流
-  0. 退出
+[Manage]
+  6. Uninstall service
+  7. Upgrade service
+  8. View status
+  9. Health check
+ 10. Full uninstall
+ 11. Configure AI shunt (SS upstream)
+ 12. Disable AI shunt
+  0. Exit
 ```
 
-## Layout
+## Project Layout
 
 ```
 /opt/simpleproxy/
-├── simpleproxy.sh
-├── install.sh
+├── simpleproxy.sh          # Main script (menu, dispatch, health checks)
+├── install.sh              # One-line installer
 ├── lib/
+│   ├── common.sh           # Shared utilities (OS detection, firewall, SSL, IP)
+│   └── logging.sh          # Logging helpers
 └── protocols/
+    ├── shadowsocks.sh      # Shadowsocks-rust install/uninstall/upgrade/status
+    ├── reality.sh          # VLESS + Reality (Xray)
+    ├── hysteria2.sh        # Hysteria2
+    ├── v2ray.sh            # V2Ray + TLS + WebSocket (Xray + Nginx)
+    └── snell.sh            # Snell (version from Surge KB page)
 ```
 
 ## Upgrade
 
 ```bash
 cd /opt/simpleproxy && git pull
-sudo simpleproxy
+sudo simpleproxy    # then choose "Upgrade service"
 ```
 
 ## Uninstall
 
 ```bash
-sudo simpleproxy  # choose: 完全卸载
+sudo simpleproxy    # then choose "Full uninstall"
 ```
+
+## AI Shunt
+
+SimpleProxy can route traffic matching AI/OpenAI domain rules to an upstream Shadowsocks server.
+
+- **Rule source**: ACL4SSR `AI.list` + `OpenAi.list` (auto-downloaded)
+- **Configuration**: prompted for upstream SS parameters (server / port / method / password)
+- **Safety**: upstream config is parsed as fixed `KEY=VALUE` pairs — never `source`d
+- **Rollback**: Xray configs are backed up before modification; auto-rollback on `xray -test` failure
 
 ## Troubleshooting
 
-- Self-test: `sudo simpleproxy --self-test`
-- Status: `sudo simpleproxy` → menu “查看状态”
-- Logs: `tail -f /var/log/simpleproxy.log`
-- systemd logs: `journalctl -u <service-name> -f`
-- If you hit `MODULE_DIR: readonly variable`, update to the latest `main` or reinstall from the current `install.sh`
+| Command | Purpose |
+|---------|---------|
+| `sudo simpleproxy --self-test` | Validate file integrity and Bash syntax |
+| `sudo simpleproxy` → "View status" | Show all service statuses and ports |
+| `tail -f /var/log/simpleproxy.log` | Application log |
+| `journalctl -u <service-name> -f` | systemd journal for a specific service |
 
-## Manual protocol invocation
+## Security Notes
 
-```bash
-cd /opt/simpleproxy
-bash ./protocols/shadowsocks.sh status_shadowsocks
-```
-
-Note: protocol scripts compute and lock their `lib/` path internally (no `MODULE_DIR` override) to reduce `source` path-hijack risk.
-
-## Security notes
-
-- Private keys are set to **600** (certs typically **644**)
-- AI upstream config is not sourced; it is parsed
-- AI shunt changes now back up Xray configs and roll back automatically on validation failure
-- Temporary downloads prefer `mktemp` to reduce `/tmp` race/overwrite risk
+- Private keys are set to permission **600**; certificates to **644**
+- AI upstream config is parsed, not sourced — no arbitrary code execution
+- Configuration changes back up and roll back automatically on validation failure
+- Temporary downloads use `mktemp` to reduce `/tmp` race conditions
+- Protocol scripts resolve their own `lib/` path internally to prevent `source` path-hijack
 
 ## License
 
