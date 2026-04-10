@@ -1,6 +1,7 @@
 #!/bin/bash
 # SIMPLEPROXY - A Multi-Protocol Proxy Installer
-# Supports: Shadowsocks-rust, Reality, Hysteria2, V2Ray+TLS+WS, Snell
+# Supports: Shadowsocks-rust, Reality, Hysteria2, V2Ray+TLS+WS, Snell,
+#           ShadowTLS v3, AnyTLS, Trojan, TUIC V5
 # Version: 260320
 #
 # 重构版本: 模块化设计，protocols/ 目录包含各协议实现
@@ -106,7 +107,7 @@ health_check() {
     echo -e "${YELLOW}=========== 一键健康检查 ===========${NC}"
     log_info "运行健康检查"
     
-    local services=("shadowsocks.service" "xray-reality.service" "xray-v2ray.service" "hysteria-server.service" "snell.service")
+    local services=("shadowsocks.service" "xray-reality.service" "xray-v2ray.service" "hysteria-server.service" "snell.service" "singbox-shadowtls.service" "singbox-anytls.service" "singbox-trojan.service" "singbox-tuic.service")
     for s in "${services[@]}"; do
         if systemctl is-active --quiet "$s" 2>/dev/null; then
             echo -e "${GREEN}✓ $s: 运行中${NC}"
@@ -117,7 +118,7 @@ health_check() {
     
     echo ""
     echo -e "${BLUE}监听端口(关键服务):${NC}"
-    ss -tulpen 2>/dev/null | grep -E 'ssserver|xray|hysteria|snell' || echo "未检测到相关监听"
+    ss -tulpen 2>/dev/null | grep -E 'ssserver|xray|hysteria|snell|sing-box' || echo "未检测到相关监听"
     
     echo ""
     if [[ -d /etc/letsencrypt/live ]]; then
@@ -157,15 +158,19 @@ show_menu() {
     echo "    3. Hysteria2"
     echo "    4. V2Ray + TLS + WebSocket"
     echo "    5. Snell"
+    echo -e "    6. ShadowTLS v3  ${CYAN}(sing-box)${NC}"
+    echo -e "    7. AnyTLS        ${CYAN}(sing-box)${NC}"
+    echo -e "    8. Trojan        ${CYAN}(sing-box)${NC}"
+    echo -e "    9. TUIC V5       ${CYAN}(sing-box)${NC}"
     echo ""
     echo -e "  ${BLUE}[管理选项]${NC}"
-    echo "    6. 卸载服务"
-    echo "    7. 升级服务"
-    echo "    8. 查看状态"
-    echo "    9. 健康检查"
-    echo "   10. 完全卸载"
-    echo "   11. 配置 AI 分流 (SS 上游)"
-    echo "   12. 关闭 AI 分流"
+    echo "   10. 卸载服务"
+    echo "   11. 升级服务"
+    echo "   12. 查看状态"
+    echo "   13. 健康检查"
+    echo "   14. 完全卸载"
+    echo "   15. 配置 AI 分流 (SS 上游)"
+    echo "   16. 关闭 AI 分流"
     echo ""
     echo "    0. 退出"
     echo ""
@@ -180,6 +185,10 @@ handle_install() {
         3) call_protocol hysteria2 install ;;
         4) call_protocol v2ray install ;;
         5) call_protocol snell install ;;
+        6) call_protocol shadowtls install ;;
+        7) call_protocol anytls install ;;
+        8) call_protocol trojan install ;;
+        9) call_protocol tuic install ;;
         *) echo -e "${RED}无效选项${NC}" ;;
     esac
 }
@@ -192,7 +201,11 @@ handle_uninstall() {
     echo "  3. Hysteria2"
     echo "  4. V2Ray"
     echo "  5. Snell"
-    echo "  6. 全部卸载"
+    echo "  6. ShadowTLS v3"
+    echo "  7. AnyTLS"
+    echo "  8. Trojan"
+    echo "  9. TUIC V5"
+    echo " 10. 全部卸载"
     echo "  0. 取消"
     read -p "请选择: " uninstall_choice
     
@@ -202,12 +215,20 @@ handle_uninstall() {
         3) call_protocol hysteria2 uninstall ;;
         4) call_protocol v2ray uninstall ;;
         5) call_protocol snell uninstall ;;
-        6)
+        6) call_protocol shadowtls uninstall ;;
+        7) call_protocol anytls uninstall ;;
+        8) call_protocol trojan uninstall ;;
+        9) call_protocol tuic uninstall ;;
+        10)
             call_protocol shadowsocks uninstall 2>/dev/null || true
             call_protocol reality uninstall 2>/dev/null || true
             call_protocol hysteria2 uninstall 2>/dev/null || true
             call_protocol v2ray uninstall 2>/dev/null || true
             call_protocol snell uninstall 2>/dev/null || true
+            call_protocol shadowtls uninstall 2>/dev/null || true
+            call_protocol anytls uninstall 2>/dev/null || true
+            call_protocol trojan uninstall 2>/dev/null || true
+            call_protocol tuic uninstall 2>/dev/null || true
             ;;
         0) return ;;
         *) echo -e "${RED}无效选项${NC}" ;;
@@ -222,6 +243,10 @@ handle_upgrade() {
     echo "  3. Hysteria2"
     echo "  4. V2Ray"
     echo "  5. Snell"
+    echo "  6. ShadowTLS v3"
+    echo "  7. AnyTLS"
+    echo "  8. Trojan"
+    echo "  9. TUIC V5"
     echo "  0. 取消"
     read -p "请选择: " upgrade_choice
 
@@ -231,6 +256,10 @@ handle_upgrade() {
         3) call_protocol hysteria2 upgrade ;;
         4) call_protocol v2ray upgrade ;;
         5) call_protocol snell upgrade ;;
+        6) call_protocol shadowtls upgrade ;;
+        7) call_protocol anytls upgrade ;;
+        8) call_protocol trojan upgrade ;;
+        9) call_protocol tuic upgrade ;;
         0) return ;;
         *) echo -e "${RED}无效选项${NC}" ;;
     esac
@@ -247,6 +276,14 @@ handle_status() {
     call_protocol v2ray status 2>/dev/null || true
     echo ""
     call_protocol snell status 2>/dev/null || true
+    echo ""
+    call_protocol shadowtls status 2>/dev/null || true
+    echo ""
+    call_protocol anytls status 2>/dev/null || true
+    echo ""
+    call_protocol trojan status 2>/dev/null || true
+    echo ""
+    call_protocol tuic status 2>/dev/null || true
 }
 
 # ============================================
@@ -542,11 +579,16 @@ self_test() {
         "$root_dir/simpleproxy.sh"
         "$root_dir/lib/common.sh"
         "$root_dir/lib/logging.sh"
+        "$root_dir/lib/singbox.sh"
         "$root_dir/protocols/shadowsocks.sh"
         "$root_dir/protocols/reality.sh"
         "$root_dir/protocols/hysteria2.sh"
         "$root_dir/protocols/v2ray.sh"
         "$root_dir/protocols/snell.sh"
+        "$root_dir/protocols/shadowtls.sh"
+        "$root_dir/protocols/anytls.sh"
+        "$root_dir/protocols/trojan.sh"
+        "$root_dir/protocols/tuic.sh"
     )
 
     for f in "${required[@]}"; do
@@ -569,7 +611,7 @@ self_test() {
     done
 
     # 3) 动作分发检查（只做状态查询，避免副作用）
-    local protocols=(shadowsocks reality hysteria2 v2ray snell)
+    local protocols=(shadowsocks reality hysteria2 v2ray snell shadowtls anytls trojan tuic)
     for p in "${protocols[@]}"; do
         local script="$root_dir/protocols/${p}.sh"
         local action="status_${p}"
@@ -635,34 +677,34 @@ main() {
         read -p "请输入选项: " choice
         
         case $choice in
-            1|2|3|4|5)
+            1|2|3|4|5|6|7|8|9)
                 if ! handle_install "$choice"; then
                     echo -e "${RED}安装流程未完成，请查看上方提示。${NC}"
                 fi
                 echo ""
                 read -p "按回车键继续..."
                 ;;
-            6)
+            10)
                 handle_uninstall || true
                 echo ""
                 read -p "按回车键继续..."
                 ;;
-            7)
+            11)
                 handle_upgrade || true
                 echo ""
                 read -p "按回车键继续..."
                 ;;
-            8)
+            12)
                 handle_status || true
                 echo ""
                 read -p "按回车键继续..."
                 ;;
-            9)
+            13)
                 health_check || true
                 echo ""
                 read -p "按回车键继续..."
                 ;;
-            10)
+            14)
                 echo -e "${RED}警告: 这将卸载所有服务和数据!${NC}"
                 read -p "确定要继续? (y/yes): " confirm
                 if [[ "$confirm" =~ ^[Yy]([Ee][Ss])?$ ]]; then
@@ -671,6 +713,10 @@ main() {
                     call_protocol hysteria2 uninstall 2>/dev/null || true
                     call_protocol v2ray uninstall 2>/dev/null || true
                     call_protocol snell uninstall 2>/dev/null || true
+                    call_protocol shadowtls uninstall 2>/dev/null || true
+                    call_protocol anytls uninstall 2>/dev/null || true
+                    call_protocol trojan uninstall 2>/dev/null || true
+                    call_protocol tuic uninstall 2>/dev/null || true
                     rm -rf "$STATE_DIR" "$EXPORT_DIR" "$BACKUP_ROOT"
                     # 清理安装目录和 symlink
                     rm -f /usr/local/bin/simpleproxy /usr/local/bin/sp
@@ -680,12 +726,12 @@ main() {
                 echo ""
                 read -p "按回车键继续..."
                 ;;
-            11)
+            15)
                 apply_ai_shunt || true
                 echo ""
                 read -p "按回车键继续..."
                 ;;
-            12)
+            16)
                 disable_ai_shunt || true
                 echo ""
                 read -p "按回车键继续..."

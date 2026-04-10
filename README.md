@@ -4,13 +4,17 @@ A modular Bash script for installing and managing multiple proxy protocols on Li
 
 ## Supported Protocols
 
-| Protocol | Implementation | Default Port |
-|----------|---------------|-------------|
-| Shadowsocks-rust | ss-server (latest release from GitHub) | User-defined |
-| VLESS + Reality | Xray-core | 443 |
-| Hysteria2 | hysteria-server | User-defined |
-| V2Ray + TLS + WebSocket | Xray-core + Nginx | 443 |
-| Snell | snell-server (version fetched from Surge KB) | User-defined |
+| Protocol | Implementation | Default Port | Transport |
+|----------|---------------|-------------|-----------|
+| Shadowsocks-rust | ss-server (latest release from GitHub) | User-defined | TCP/UDP |
+| VLESS + Reality | Xray-core | 443 | TCP |
+| Hysteria2 | hysteria-server | User-defined | UDP (QUIC) |
+| V2Ray + TLS + WebSocket | Xray-core + Nginx | 443 | TCP |
+| Snell | snell-server (version fetched from Surge KB) | User-defined | TCP |
+| ShadowTLS v3 | sing-box | User-defined | TCP |
+| AnyTLS | sing-box | User-defined | TCP |
+| Trojan | sing-box | User-defined | TCP |
+| TUIC V5 | sing-box | User-defined | UDP (QUIC) |
 
 ## Features
 
@@ -19,6 +23,8 @@ A modular Bash script for installing and managing multiple proxy protocols on Li
 - **Health checks** — service status, listening ports, certificate expiration tracking
 - **SSL automation** — ACME certificate issuance and renewal
 - **AI shunt** — route AI/OpenAI domain traffic to an upstream Shadowsocks server using ACL4SSR rules (`AI.list` + `OpenAi.list`)
+- **sing-box backend** — shared sing-box binary for ShadowTLS v3, AnyTLS, Trojan, and TUIC V5 protocols
+- **Self-signed certificate** — auto-generated EC P-256 certificate shared across TLS-based sing-box protocols
 - **Self-test mode** — validate file integrity and Bash syntax without making system changes
 - **Auto-rollback** — configuration changes are backed up and rolled back on validation failure
 - **Snell DNS** — optional custom DNS configuration during Snell installation (supports IP addresses and DoH/DoT URLs)
@@ -54,15 +60,19 @@ sudo sp
   3. Hysteria2
   4. V2Ray + TLS + WebSocket
   5. Snell
+  6. ShadowTLS v3  (sing-box)
+  7. AnyTLS        (sing-box)
+  8. Trojan        (sing-box)
+  9. TUIC V5       (sing-box)
 
 [Manage]
-  6. Uninstall service
-  7. Upgrade service
-  8. View status
-  9. Health check
- 10. Full uninstall
- 11. Configure AI shunt (SS upstream)
- 12. Disable AI shunt
+ 10. Uninstall service
+ 11. Upgrade service
+ 12. View status
+ 13. Health check
+ 14. Full uninstall
+ 15. Configure AI shunt (SS upstream)
+ 16. Disable AI shunt
   0. Exit
 ```
 
@@ -74,13 +84,18 @@ sudo sp
 ├── install.sh              # One-line installer
 ├── lib/
 │   ├── common.sh           # Shared utilities (OS detection, firewall, SSL, IP)
-│   └── logging.sh          # Logging helpers
+│   ├── logging.sh          # Logging helpers
+│   └── singbox.sh          # sing-box binary/cert/service management
 └── protocols/
     ├── shadowsocks.sh      # Shadowsocks-rust install/uninstall/upgrade/status
     ├── reality.sh          # VLESS + Reality (Xray)
     ├── hysteria2.sh        # Hysteria2
     ├── v2ray.sh            # V2Ray + TLS + WebSocket (Xray + Nginx)
-    └── snell.sh            # Snell (version from Surge KB page)
+    ├── snell.sh            # Snell (version from Surge KB page)
+    ├── shadowtls.sh        # ShadowTLS v3 (sing-box)
+    ├── anytls.sh           # AnyTLS (sing-box)
+    ├── trojan.sh           # Trojan (sing-box)
+    └── tuic.sh             # TUIC V5 (sing-box)
 ```
 
 ## Upgrade
