@@ -57,7 +57,7 @@ sudo sp
 [Install]
   1. Shadowsocks-rust
   2. Reality (VLESS)
-  3. Hysteria2
+  3. Hysteria2     (sing-box)
   4. V2Ray + TLS + WebSocket
   5. Snell
   6. ShadowTLS v3  (sing-box)
@@ -89,7 +89,7 @@ sudo sp
 └── protocols/
     ├── shadowsocks.sh      # Shadowsocks-rust install/uninstall/upgrade/status
     ├── reality.sh          # VLESS + Reality (Xray)
-    ├── hysteria2.sh        # Hysteria2
+    ├── hysteria2.sh        # Hysteria2 (sing-box)
     ├── v2ray.sh            # V2Ray + TLS + WebSocket (Xray + Nginx)
     ├── snell.sh            # Snell (version from Surge KB page)
     ├── shadowtls.sh        # ShadowTLS v3 (sing-box)
