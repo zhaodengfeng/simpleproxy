@@ -122,13 +122,13 @@ upgrade_singbox_binary() {
 
 # 卸载 sing-box (仅在无协议使用时)
 uninstall_singbox_binary() {
-    for proto in shadowtls anytls trojan tuic; do
+    for proto in shadowtls anytls trojan tuic hysteria2; do
         is_marked_installed "$proto" && return 0
     done
     rm -f "$SINGBOX_BIN" "${SINGBOX_BIN}.bak"
     # 如果没有任何 sing-box 配置目录存在则清理证书
     local has_config=0
-    for d in shadowtls anytls trojan tuic; do
+    for d in shadowtls anytls trojan tuic hysteria2; do
         [[ -d "${SINGBOX_WORK_DIR}/${d}" ]] && has_config=1 && break
     done
     if [[ $has_config -eq 0 ]]; then

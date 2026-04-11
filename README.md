@@ -8,7 +8,7 @@ A modular Bash script for installing and managing multiple proxy protocols on Li
 |----------|---------------|-------------|-----------|
 | Shadowsocks-rust | ss-server (latest release from GitHub) | User-defined | TCP/UDP |
 | VLESS + Reality | Xray-core | 443 | TCP |
-| Hysteria2 | hysteria-server | User-defined | UDP (QUIC) |
+| Hysteria2 | sing-box | User-defined | UDP (QUIC) |
 | V2Ray + TLS + WebSocket | Xray-core + Nginx | 443 | TCP |
 | Snell | snell-server (version fetched from Surge KB) | User-defined | TCP |
 | ShadowTLS v3 | sing-box | User-defined | TCP |
@@ -23,7 +23,7 @@ A modular Bash script for installing and managing multiple proxy protocols on Li
 - **Health checks** — service status, listening ports, certificate expiration tracking
 - **SSL automation** — ACME certificate issuance and renewal
 - **AI shunt** — route AI/OpenAI domain traffic to an upstream Shadowsocks server using ACL4SSR rules (`AI.list` + `OpenAi.list`)
-- **sing-box backend** — shared sing-box binary for ShadowTLS v3, AnyTLS, Trojan, and TUIC V5 protocols
+- **sing-box backend** — shared sing-box binary for ShadowTLS v3, AnyTLS, Trojan, TUIC V5, and Hysteria2 protocols
 - **Self-signed certificate** — auto-generated EC P-256 certificate shared across TLS-based sing-box protocols
 - **Self-test mode** — validate file integrity and Bash syntax without making system changes
 - **Auto-rollback** — configuration changes are backed up and rolled back on validation failure

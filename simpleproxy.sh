@@ -107,7 +107,7 @@ health_check() {
     echo -e "${YELLOW}=========== 一键健康检查 ===========${NC}"
     log_info "运行健康检查"
     
-    local services=("shadowsocks.service" "xray-reality.service" "xray-v2ray.service" "hysteria-server.service" "snell.service" "singbox-shadowtls.service" "singbox-anytls.service" "singbox-trojan.service" "singbox-tuic.service")
+    local services=("shadowsocks.service" "xray-reality.service" "xray-v2ray.service" "singbox-hysteria2.service" "snell.service" "singbox-shadowtls.service" "singbox-anytls.service" "singbox-trojan.service" "singbox-tuic.service")
     for s in "${services[@]}"; do
         if systemctl is-active --quiet "$s" 2>/dev/null; then
             echo -e "${GREEN}✓ $s: 运行中${NC}"
